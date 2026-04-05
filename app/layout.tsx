@@ -10,7 +10,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Anton Rx - Medical Benefit Drug Policy Tracker',
+  title: 'RxRefactor - Medical Benefit Drug Policy Tracker',
   description: 'AI-powered healthcare intelligence platform for comparing drug coverage policies across payers',
   generator: 'v0.app',
   icons: {

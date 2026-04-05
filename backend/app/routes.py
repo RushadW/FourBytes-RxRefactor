@@ -509,7 +509,7 @@ def view_document(doc_id: str, db: Session = Depends(get_db)):
 
 @router.get("/health")
 def health():
-    return {"status": "ok", "service": "Anton Rx API"}
+    return {"status": "ok", "service": "RxRefactor API"}
 
 
 # ---------- Sources ----------

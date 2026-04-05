@@ -1,4 +1,4 @@
-// Core domain types for Anton Rx
+// Core domain types for RxRefactor
 
 export interface Drug {
   id: string

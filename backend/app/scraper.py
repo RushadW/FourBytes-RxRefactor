@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Polite request headers
 DEFAULT_HEADERS = {
-    "User-Agent": "AntonRx-PolicyTracker/1.0 (hackathon research tool; contact: team@antonrx.dev)",
+    "User-Agent": "RxRefactor-PolicyTracker/1.0 (hackathon research tool; contact: team@rxrefactor.dev)",
     "Accept": "text/html,application/xhtml+xml,application/pdf,*/*",
 }
 

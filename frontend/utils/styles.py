@@ -1,5 +1,5 @@
 """
-AntonRx — Streamlit CSS injection.
+RxRefactor — Streamlit CSS injection.
 Ports the mockup design system into Streamlit.
 Rules are surgical — no broad wildcards that bleed into components.
 """
