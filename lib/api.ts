@@ -198,7 +198,7 @@ export async function fetchComparison(drugId: string, startTime: number): Promis
 
 const DRUG_ALIASES: Record<string, string> = {
   rituximab: 'rituximab', rituxan: 'rituximab', riabni: 'rituximab', ruxience: 'rituximab', truxima: 'rituximab',
-  humira: 'humira', adalimumab: 'adalimumab',
+  humira: 'adalimumab', adalimumab: 'adalimumab',
   bevacizumab: 'bevacizumab', avastin: 'bevacizumab',
   botox: 'botulinum', botulinum: 'botulinum', 'botulinum toxin': 'botulinum',
   denosumab: 'denosumab', prolia: 'denosumab', xgeva: 'denosumab',
