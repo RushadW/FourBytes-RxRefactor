@@ -16,3 +16,4 @@ next.user-config.*
 node_modules
 .next/
 .DS_Store
+backend/app/__pycache__
