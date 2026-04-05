@@ -1,20 +1,22 @@
 'use client'
 
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo, Fragment, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles, TrendingUp, TrendingDown, Shield, Clock, Building2,
   CheckCircle2, AlertTriangle, XCircle, GitCompareArrows, Pill,
   BarChart3, FileText, Lightbulb, ArrowRight, ExternalLink,
   Globe, BookOpen, Zap, BadgeCheck, ChevronDown, Send, Copy, History, Download,
-  PanelRightClose, PanelRightOpen,
+  PanelRightClose, PanelRightOpen, User, Stethoscope, Activity,
 } from 'lucide-react'
-import { SpeakButton } from './voice-orb'
+import { SpeakButton, VoiceOrb } from './voice-orb'
 import { parseQuery, getPoliciesForDrug, getDrugById, drugs, payerPolicies } from '@/lib/mock-data'
-import { fetchComparison, askQuestion, fetchPolicyVersions, parseQueryFilters, type ApiAskResponse, type PolicyVersionRecord } from '@/lib/api'
+import { fetchComparison, askQuestion, fetchPolicyVersions, parseQueryFilters, fetchDrugs, fetchPoliciesByPayer, type ApiAskResponse, type PolicyVersionRecord } from '@/lib/api'
 import type { PayerPolicy, Drug, Insight } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { PolicyMatrix } from './policy-matrix'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'
 
 // Widget types the AI can choose to render
 type WidgetType =
@@ -110,7 +112,7 @@ function QuickStatsWidget({ policies, drug, totalPolicies }: { policies: PayerPo
         return (
           <motion.div
             key={stat.label}
-            className="bg-white rounded-xl p-4 border border-border/60 soft-shadow text-center"
+            className="bg-card rounded-xl p-4 border border-border/70 soft-shadow text-center"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.08 }}
@@ -136,7 +138,7 @@ function ComparisonCardsWidget({ policies, drug }: { policies: PayerPolicy[]; dr
         {policies.map((policy, i) => (
           <motion.div
             key={policy.payerId}
-            className="bg-white rounded-xl p-4 border border-border/60 soft-shadow"
+            className="bg-card rounded-xl p-4 border border-border/70 soft-shadow"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 + i * 0.1 }}
@@ -182,7 +184,7 @@ function ComparisonCardsWidget({ policies, drug }: { policies: PayerPolicy[]; dr
 
 function StepTherapyVisualWidget({ policies, drug }: { policies: PayerPolicy[]; drug: Drug | null | undefined }) {
   return (
-    <div className="bg-white rounded-xl p-5 border border-border/60 soft-shadow">
+    <div className="bg-card rounded-xl p-5 border border-border/70 soft-shadow">
       <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
         <Clock className="w-4 h-4 text-rose-400" />
         Step Therapy Overview {drug ? `— ${drug.name}` : ''}
@@ -230,7 +232,7 @@ function SiteOfCareWidget({ policies, drug }: { policies: PayerPolicy[]; drug: D
   const allSites = new Set(policies.flatMap(p => p.siteOfCare))
   
   return (
-    <div className="bg-white rounded-xl p-5 border border-border/60 soft-shadow">
+    <div className="bg-card rounded-xl p-5 border border-border/70 soft-shadow">
       <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
         <Building2 className="w-4 h-4 text-primary" />
         Site of Care Availability — {drug?.name}
@@ -299,7 +301,7 @@ function CoverageVerdictWidget({ policies, payerName }: { policies: PayerPolicy[
         return (
           <motion.div
             key={policy.drugId}
-            className="bg-white rounded-xl p-4 border border-border/60 soft-shadow flex items-center gap-4"
+            className="bg-card rounded-xl p-4 border border-border/70 soft-shadow flex items-center gap-4"
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.1 }}
@@ -325,7 +327,7 @@ function CoverageVerdictWidget({ policies, payerName }: { policies: PayerPolicy[
 
 function PayerBreakdownWidget({ policies, payerName }: { policies: PayerPolicy[]; payerName: string }) {
   return (
-    <div className="bg-white rounded-xl p-5 border border-border/60 soft-shadow">
+    <div className="bg-card rounded-xl p-5 border border-border/70 soft-shadow">
       <h3 className="text-sm font-semibold text-foreground mb-3">{payerName} Details</h3>
       <div className="space-y-3">
         {policies.map(policy => {
@@ -353,7 +355,7 @@ function PolicyChangesWidget() {
 
   useEffect(() => {
     // Fetch real version diffs from the API
-    fetch('http://localhost:8080/api/matrix')
+    fetch(`${API_BASE}/matrix`)
       .then(r => r.json())
       .then(async (matrix) => {
         const allChanges: typeof changes = []
@@ -397,7 +399,7 @@ function PolicyChangesWidget() {
   }
 
   return (
-    <div className="bg-white rounded-xl p-5 border border-border/60 soft-shadow">
+    <div className="bg-card rounded-xl p-5 border border-border/70 soft-shadow">
       <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
         <GitCompareArrows className="w-4 h-4 text-primary" />
         Recent Policy Changes
@@ -467,28 +469,57 @@ function RenderedMarkdown({ text }: { text: string }) {
   // Parse markdown-like text into React elements
   const lines = text.split('\n')
   const elements: React.ReactNode[] = []
-  let listBuffer: string[] = []
+  let bulletBuffer: string[] = []
+  let numberedBuffer: { num: string; text: string }[] = []
 
-  const flushList = () => {
-    if (listBuffer.length > 0) {
+  const flushBullets = () => {
+    if (bulletBuffer.length > 0) {
       elements.push(
-        <ul key={`list-${elements.length}`} className="space-y-1.5 my-2">
-          {listBuffer.map((item, j) => (
-            <li key={j} className="flex items-start gap-2 text-[15px] leading-relaxed text-slate-700">
-              <span className="mt-2 w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+        <ul key={`ul-${elements.length}`} className="space-y-1.5 my-2.5 ml-1">
+          {bulletBuffer.map((item, j) => (
+            <li key={j} className="flex items-start gap-2.5 text-[14.5px] leading-relaxed text-slate-700">
+              <span className="mt-[9px] w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
               <span>{renderInline(item)}</span>
             </li>
           ))}
         </ul>
       )
-      listBuffer = []
+      bulletBuffer = []
     }
   }
 
+  const flushNumbered = () => {
+    if (numberedBuffer.length > 0) {
+      elements.push(
+        <ol key={`ol-${elements.length}`} className="space-y-1.5 my-2.5 ml-1">
+          {numberedBuffer.map((item, j) => (
+            <li key={j} className="flex items-start gap-2.5 text-[14.5px] leading-relaxed text-slate-700">
+              <span className="mt-[1px] min-w-[22px] h-[22px] rounded-full bg-indigo-50 text-indigo-600 text-[11px] font-bold flex items-center justify-center flex-shrink-0 border border-indigo-100">{item.num}</span>
+              <span>{renderInline(item.text)}</span>
+            </li>
+          ))}
+        </ol>
+      )
+      numberedBuffer = []
+    }
+  }
+
+  const flushAll = () => {
+    flushBullets()
+    flushNumbered()
+  }
+
   const renderInline = (line: string): React.ReactNode[] => {
-    return line.split(/(\*\*.*?\*\*)/).map((part, i) => {
+    // Handle **bold**, *italic*, and `code`
+    return line.split(/(\*\*.*?\*\*|\*[^*]+\*|`[^`]+`)/).map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
         return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
+      }
+      if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) {
+        return <em key={i} className="italic text-slate-600">{part.slice(1, -1)}</em>
+      }
+      if (part.startsWith('`') && part.endsWith('`')) {
+        return <code key={i} className="px-1.5 py-0.5 bg-slate-100 text-indigo-700 text-[13px] rounded font-mono">{part.slice(1, -1)}</code>
       }
       return <span key={i}>{part}</span>
     })
@@ -498,56 +529,91 @@ function RenderedMarkdown({ text }: { text: string }) {
     const line = lines[i].trim()
 
     if (!line) {
-      flushList()
+      flushAll()
       continue
     }
 
-    // Headings
-    if (line.startsWith('## ')) {
-      flushList()
+    // ### Sub-headings (payer headings, section headings)
+    if (line.startsWith('### ')) {
+      flushAll()
       elements.push(
-        <h3 key={`h-${i}`} className="text-sm font-bold text-slate-900 mt-4 mb-1.5 flex items-center gap-2">
+        <h4 key={`h3-${i}`} className="text-[13.5px] font-bold text-slate-900 mt-4 mb-1.5 flex items-center gap-2">
           <span className="w-1 h-4 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500" />
+          {renderInline(line.slice(4))}
+        </h4>
+      )
+      continue
+    }
+
+    // ## Major headings
+    if (line.startsWith('## ')) {
+      flushAll()
+      elements.push(
+        <h3 key={`h2-${i}`} className="text-sm font-bold text-slate-900 mt-4 mb-1.5 flex items-center gap-2 pb-1.5 border-b border-slate-100">
+          <span className="w-1.5 h-4 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500" />
           {renderInline(line.slice(3))}
         </h3>
       )
       continue
     }
 
+    // # Top headings
     if (line.startsWith('# ')) {
-      flushList()
+      flushAll()
       elements.push(
-        <h2 key={`h-${i}`} className="text-base font-bold text-slate-900 mt-3 mb-2">
+        <h2 key={`h1-${i}`} className="text-base font-bold text-slate-900 mt-3 mb-2">
           {renderInline(line.slice(2))}
         </h2>
       )
       continue
     }
 
+    // Numbered list (1. 2. 3. etc.)
+    const numberedMatch = line.match(/^(\d+)[.)]\s+(.+)/)
+    if (numberedMatch) {
+      flushBullets()
+      numberedBuffer.push({ num: numberedMatch[1], text: numberedMatch[2] })
+      continue
+    }
+
     // Bullet points
     if (line.startsWith('- ') || line.startsWith('• ') || line.startsWith('* ')) {
-      listBuffer.push(line.slice(2))
+      flushNumbered()
+      bulletBuffer.push(line.slice(2))
       continue
     }
 
     // Horizontal rule / separator
     if (line.startsWith('---')) {
-      flushList()
-      elements.push(<hr key={`hr-${i}`} className="border-slate-200 my-3" />)
+      flushAll()
+      elements.push(<hr key={`hr-${i}`} className="border-slate-100 my-3" />)
+      continue
+    }
+
+    // "Not available" / "not specified" callouts — highlight in amber
+    const lower = line.toLowerCase()
+    if (lower.includes('not available in our data') || lower.includes('not specified in the policy') || lower.includes('do not have coverage data')) {
+      flushAll()
+      elements.push(
+        <div key={`callout-${i}`} className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 my-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+          <p className="text-[13.5px] leading-relaxed text-amber-800">{renderInline(line)}</p>
+        </div>
+      )
       continue
     }
 
     // Normal paragraph
-    flushList()
+    flushAll()
     elements.push(
-      <p key={`p-${i}`} className="text-[15px] leading-relaxed text-slate-700 my-1.5">
+      <p key={`p-${i}`} className="text-[14.5px] leading-relaxed text-slate-700 my-1.5">
         {renderInline(line)}
       </p>
     )
   }
-  flushList()
+  flushAll()
 
-  return <div>{elements}</div>
+  return <div className="space-y-0.5">{elements}</div>
 }
 
 // ============= INLINE COMPARISON TABLE (shown in chat for comparison queries) =============
@@ -694,9 +760,13 @@ function DrugComparisonTable({ policies, drug }: {
           return pol.step_therapy
             ? { text: '✓ Required', badge: 'text-violet-700 bg-violet-50 border-violet-200' }
             : { text: '✗ Not Required', style: 'text-slate-400' }
-        case 'st_details':
+        case 'st_details': {
           if (!pol.step_therapy) return { text: 'N/A — No step therapy required', style: 'text-slate-400 italic text-[11px]' }
-          return { text: pol.step_therapy_details || 'Details not available', style: 'text-slate-700 text-[11px] leading-snug' }
+          const stText = pol.step_therapy_details || 'Details not available'
+          const steps = stText.split(/(?=Step\s*\d)/i).map(s => s.trim()).filter(Boolean)
+          if (steps.length > 1) return { text: stText, style: 'text-slate-700 text-[11px] leading-snug', list: steps }
+          return { text: stText, style: 'text-slate-700 text-[11px] leading-snug' }
+        }
         case 'soc': {
           const sites = pol.site_of_care
           if (!sites || sites.length === 0) return { text: 'No restrictions', style: 'text-slate-400 italic' }
@@ -722,6 +792,18 @@ function DrugComparisonTable({ policies, drug }: {
             <span className={cn('w-2 h-2 rounded-full', val.dot)} />
             <span className="text-slate-600 text-xs">{val.text}</span>
           </div>
+        )
+      }
+      if ('list' in val && val.list) {
+        return (
+          <ul className="space-y-1">
+            {(val.list as string[]).map((item, j) => (
+              <li key={j} className="flex items-start gap-1.5 text-[11px] leading-snug text-slate-700">
+                <span className="mt-1.5 w-1 h-1 rounded-full bg-violet-400 flex-shrink-0" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
         )
       }
       return <span className={cn('text-xs', val.style)}>{val.text}</span>
@@ -777,9 +859,9 @@ function DrugComparisonTable({ policies, drug }: {
     }
 
     return (
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-border bg-card overflow-hidden soft-shadow">
         {/* Header */}
-        <div className="px-5 py-3.5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+        <div className="px-5 py-3.5 bg-gradient-to-r from-muted/60 to-card border-b border-border/80">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-base font-bold text-slate-900">{drugName}</h3>
@@ -958,9 +1040,9 @@ function PolicyDetailCards({ policies }: { policies: ApiAskResponse['relevant_po
   if (policies.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-slate-800">Policy Details</h3>
+    <div className="rounded-xl border border-border bg-card overflow-hidden soft-shadow">
+      <div className="px-4 py-3 border-b border-border/80 flex items-center justify-between bg-muted/20">
+        <h3 className="text-sm font-bold text-foreground">Policy Details</h3>
         <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
           {policies.length} {policies.length === 1 ? 'policy' : 'policies'}
         </span>
@@ -1238,9 +1320,9 @@ function SourceEvidence({ sources, policies }: {
   if (uniqueSources.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-slate-800">Source Evidence</h3>
+    <div className="rounded-xl border border-border bg-card overflow-hidden soft-shadow">
+      <div className="px-4 py-3 border-b border-border/80 flex items-center justify-between bg-muted/20">
+        <h3 className="text-sm font-bold text-foreground">Source Evidence</h3>
         <span className="text-[11px] text-indigo-600 font-medium cursor-pointer hover:underline">Page citations</span>
       </div>
       <div className="p-3 space-y-2">
@@ -1297,6 +1379,113 @@ export function AIDashboard({ query }: AIDashboardProps) {
   const [aiLoading, setAiLoading] = useState(true)
   const [followUp, setFollowUp] = useState('')
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [selectedSuggIdx, setSelectedSuggIdx] = useState(-1)
+  const [drugNames, setDrugNames] = useState<string[]>([])
+  const followUpRef = useRef<HTMLInputElement>(null)
+
+  // Payer names for autocomplete
+  const PAYER_NAMES = ['Cigna', 'UnitedHealthcare', 'Blue Cross Blue Shield', 'Priority Health', 'UPMC', 'EmblemHealth', 'Florida Blue']
+
+  // Query templates that combine with drug/payer names
+  const QUERY_TEMPLATES = [
+    'Does {payer} cover {drug}?',
+    'Compare {drug} across payers',
+    '{drug} step therapy details',
+    '{drug} prior authorization requirements',
+    'What changed this quarter?',
+    '{drug} site of care options',
+    '{drug} coverage criteria',
+    '{drug} dosing limits',
+  ]
+
+  // Fetch drug names on mount for autocomplete
+  useEffect(() => {
+    fetchDrugs().then(d => setDrugNames(d.map(drug => drug.name))).catch(() => {})
+  }, [])
+
+  // Build autocomplete suggestions based on input
+  const updateSuggestions = useCallback((input: string) => {
+    if (!input.trim() || input.length < 2) {
+      setSuggestions([])
+      setShowSuggestions(false)
+      return
+    }
+    const lower = input.toLowerCase()
+    const results: string[] = []
+
+    // Match drug names
+    const matchedDrugs = drugNames.filter(d => d.toLowerCase().includes(lower))
+    // Match payer names
+    const matchedPayers = PAYER_NAMES.filter(p => p.toLowerCase().includes(lower))
+
+    // Generate contextual suggestions
+    for (const drug of matchedDrugs.slice(0, 3)) {
+      results.push(`Does Cigna cover ${drug}?`)
+      results.push(`${drug} step therapy details`)
+      results.push(`Compare ${drug} across payers`)
+      results.push(`${drug} prior authorization requirements`)
+    }
+    for (const payer of matchedPayers.slice(0, 2)) {
+      results.push(`Does ${payer} cover Rituximab?`)
+      results.push(`What does ${payer} cover?`)
+    }
+
+    // Also match partial templates
+    if (lower.includes('compare')) {
+      for (const drug of drugNames.slice(0, 4)) {
+        results.push(`Compare ${drug} across payers`)
+      }
+    }
+    if (lower.includes('step')) {
+      for (const drug of drugNames.slice(0, 4)) {
+        results.push(`${drug} step therapy details`)
+      }
+    }
+    if (lower.includes('prior') || lower.includes('auth')) {
+      for (const drug of drugNames.slice(0, 4)) {
+        results.push(`${drug} prior authorization requirements`)
+      }
+    }
+    if (lower.includes('change') || lower.includes('update')) {
+      results.push('What changed this quarter?')
+    }
+
+    // Deduplicate and limit
+    const unique = [...new Set(results)].slice(0, 6)
+    setSuggestions(unique)
+    setShowSuggestions(unique.length > 0)
+    setSelectedSuggIdx(-1)
+  }, [drugNames])
+
+  const handleFollowUpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFollowUp(e.target.value)
+    updateSuggestions(e.target.value)
+  }
+
+  const selectSuggestion = (s: string) => {
+    setFollowUp(s)
+    setShowSuggestions(false)
+    setSuggestions([])
+    followUpRef.current?.focus()
+  }
+
+  const handleFollowUpKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || suggestions.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedSuggIdx(prev => (prev + 1) % suggestions.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedSuggIdx(prev => (prev <= 0 ? suggestions.length - 1 : prev - 1))
+    } else if (e.key === 'Tab' || (e.key === 'Enter' && selectedSuggIdx >= 0)) {
+      e.preventDefault()
+      selectSuggestion(suggestions[selectedSuggIdx >= 0 ? selectedSuggIdx : 0])
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false)
+    }
+  }
 
   // Fetch from API on mount — structured data first, AI answer async
   useEffect(() => {
@@ -1326,6 +1515,26 @@ export function AIDashboard({ query }: AIDashboardProps) {
         setApiData({ drug: firstDrug, policies: payerPolicies, allPolicies: payerPolicies })
       }
       setLoading(false)
+    } else if (payerIds.length > 0) {
+      // Payer-wide query (no specific drug) — fetch all policies for all detected payers
+      Promise.all(payerIds.map(pid => fetchPoliciesByPayer(pid)))
+        .then(results => {
+          const allPolicies = results.flat()
+          if (allPolicies.length > 0) {
+            // Synthesize a placeholder "drug" from the first policy
+            const first = allPolicies[0]
+            const fakeDrug: Drug = {
+              id: first.drugId,
+              name: first.drugId,
+              genericName: '',
+              therapeuticArea: '',
+              drugCategory: '',
+            }
+            setApiData({ drug: fakeDrug, policies: allPolicies, allPolicies })
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false))
     } else {
       setLoading(false)
     }
@@ -1392,8 +1601,8 @@ export function AIDashboard({ query }: AIDashboardProps) {
     return (
       <div className="p-6">
         <div className="flex items-start gap-3 mb-6">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-bold text-white">Rx</span>
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary/20 ring-2 ring-card">
+            <Stethoscope className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1 space-y-3 pt-1">
             <p className="text-sm font-semibold text-slate-700">Analyzing policy documents...</p>
@@ -1417,9 +1626,9 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
   // ── Main render ──
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-[calc(100vh-3.5rem)]">
       {/* ═══════ LEFT: Chat-style Q&A + Widgets ═══════ */}
-      <div className="flex-1 flex flex-col min-w-0 border-r border-slate-200">
+      <div className="flex-1 flex flex-col min-w-0 border-r border-border/80 bg-card/40">
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
           {/* User question bubble */}
@@ -1428,11 +1637,11 @@ export function AIDashboard({ query }: AIDashboardProps) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-2xl rounded-tr-sm px-5 py-3 max-w-lg shadow-sm">
+            <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 text-white rounded-2xl rounded-tr-sm px-5 py-3.5 max-w-lg shadow-lg shadow-indigo-500/25 ring-1 ring-white/10">
               <p className="text-sm leading-relaxed">{query}</p>
             </div>
-            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
-              JD
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 flex items-center justify-center flex-shrink-0 shadow-md ring-2 ring-card">
+              <User className="w-4.5 h-4.5 text-slate-200" />
             </div>
           </motion.div>
 
@@ -1443,8 +1652,8 @@ export function AIDashboard({ query }: AIDashboardProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
           >
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-              <span className="text-xs font-bold text-white">Rx</span>
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary/25 ring-2 ring-card">
+              <Stethoscope className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1 min-w-0 space-y-2.5">
               {/* Comparison table — only for comparison queries */}
@@ -1463,9 +1672,20 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
               {/* Answer card — only show when NOT a comparison query with data */}
               {!(isComparisonQuery(query) && comparisonPolicies) && (
-                <div className="bg-white rounded-2xl rounded-tl-sm border border-slate-200 p-5 shadow-sm">
+                <div className="bg-card rounded-2xl rounded-tl-sm border border-border/90 p-6 soft-shadow">
                   {aiResponse ? (
-                    <RenderedMarkdown text={answerText} />
+                    <div>
+                      <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+                            <Sparkles className="w-3 h-3 text-white" />
+                          </div>
+                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">AI Analysis</span>
+                        </div>
+                        <SpeakButton text={plainAnswer} />
+                      </div>
+                      <RenderedMarkdown text={answerText} />
+                    </div>
                   ) : aiLoading ? (
                     <div className="space-y-2">
                       {dashboard.summary ? (
@@ -1496,13 +1716,6 @@ export function AIDashboard({ query }: AIDashboardProps) {
                 </div>
               )}
 
-              {/* Tier / cost badge */}
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  {aiResponse ? 'Tier 2 — Claude AI RAG · ~$0.01' : aiLoading ? 'Fetching AI analysis...' : 'Tier 1 — Structured DB · No LLM call · $0.00'}
-                </span>
-              </div>
             </div>
           </motion.div>
 
@@ -1529,19 +1742,63 @@ export function AIDashboard({ query }: AIDashboardProps) {
         </div>
 
         {/* Follow-up input (sticky bottom) */}
-        <div className="border-t border-slate-200 bg-white px-6 py-3">
-          <form onSubmit={handleFollowUp} className="flex items-center gap-2">
-            <input
-              type="text"
-              value={followUp}
-              onChange={e => setFollowUp(e.target.value)}
-              placeholder="Ask a follow-up question..."
-              className="flex-1 px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all placeholder:text-slate-400"
+        <div className="border-t border-border/80 bg-card/90 backdrop-blur-md px-6 py-3">
+          <form onSubmit={handleFollowUp} className="flex items-center gap-2 w-full">
+            <VoiceOrb
+              onTranscript={(text) => {
+                setFollowUp(text)
+                // Auto-submit after voice input
+                setTimeout(() => {
+                  window.location.href = `/results?q=${encodeURIComponent(text)}`
+                }, 300)
+              }}
+              size="sm"
             />
+            <div className="flex-1 relative">
+              <input
+                ref={followUpRef}
+                type="text"
+                value={followUp}
+                onChange={handleFollowUpChange}
+                onKeyDown={handleFollowUpKeyDown}
+                onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
+                onBlur={() => { setTimeout(() => setShowSuggestions(false), 200) }}
+                placeholder="Ask a follow-up question..."
+                className="w-full px-4 py-2.5 text-sm bg-muted/50 border border-border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/35 transition-all placeholder:text-muted-foreground"
+              />
+              {/* Autocomplete dropdown */}
+              <AnimatePresence>
+                {showSuggestions && suggestions.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    className="absolute bottom-full left-0 right-0 mb-1.5 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50"
+                  >
+                    {suggestions.map((s, i) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); selectSuggestion(s) }}
+                        className={cn(
+                          'w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2.5',
+                          i === selectedSuggIdx
+                            ? 'bg-indigo-50 text-indigo-700'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        )}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                        <span className="truncate">{s}</span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             <button
               type="submit"
               disabled={!followUp.trim()}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-md shadow-primary/20"
             >
               Send <Send className="w-3.5 h-3.5" />
             </button>
@@ -1551,18 +1808,18 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
       {/* ═══════ RIGHT: Policy Matches + Sources + Actions ═══════ */}
       {rightPanelOpen ? (
-        <div className="w-[500px] shrink-0 overflow-y-auto bg-slate-50/50 space-y-4 hidden lg:block relative">
+        <div className="w-[500px] shrink-0 overflow-y-auto bg-muted/35 space-y-4 hidden lg:block relative border-l border-border/60">
           {/* Collapse button in panel header */}
-          <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-            <span className="text-xs font-bold text-slate-600">Policy Details & Sources</span>
+          <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-card/90 backdrop-blur-md border-b border-border/80">
+            <span className="text-xs font-bold text-foreground tracking-wide">Details & sources</span>
             <button
               onClick={() => setRightPanelOpen(false)}
-              className="p-1 rounded-md hover:bg-slate-200 transition-colors group" title="Collapse panel"
+              className="p-1.5 rounded-lg hover:bg-muted transition-colors group" title="Collapse panel"
             >
-              <PanelRightClose className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+              <PanelRightClose className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
             </button>
           </div>
-          <div className="px-4 pb-4 space-y-4">
+          <div className="px-4 pb-6 pt-2 space-y-4">
             {/* Policy Details — show from apiData immediately, upgrade to aiResponse when ready */}
             {(aiResponse?.relevant_policies?.length || apiData?.rawPolicies?.length) ? (
               <motion.div
@@ -1589,10 +1846,10 @@ export function AIDashboard({ query }: AIDashboardProps) {
       ) : (
         <button
           onClick={() => setRightPanelOpen(true)}
-          className="hidden lg:flex items-center justify-center w-8 shrink-0 bg-slate-50 hover:bg-slate-100 border-l border-slate-200 transition-colors group"
+          className="hidden lg:flex items-center justify-center w-9 shrink-0 bg-muted/50 hover:bg-muted border-l border-border/80 transition-colors group"
           title="Expand panel"
         >
-          <PanelRightOpen className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+          <PanelRightOpen className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
         </button>
       )}
     </div>

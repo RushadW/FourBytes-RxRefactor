@@ -2,14 +2,16 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Network, ZoomIn, ZoomOut, RotateCcw, Info } from 'lucide-react'
+import { Network, ZoomIn, ZoomOut, RotateCcw, Info, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'
 
 interface GraphNode {
   id: string
   label: string
-  type: 'drug' | 'payer' | 'criteria' | 'indication'
+  type: 'drug' | 'payer' | 'criteria'
   x: number
   y: number
   vx: number
@@ -20,95 +22,140 @@ interface GraphNode {
 interface GraphEdge {
   source: string
   target: string
-  type: 'covers' | 'requires' | 'treats'
+  type: 'covers' | 'requires' | 'not-covered'
   label?: string
   color: string
 }
-
-const initialNodes: Omit<GraphNode, 'x' | 'y' | 'vx' | 'vy'>[] = [
-  // Drugs
-  { id: 'rituximab', label: 'Rituximab', type: 'drug', radius: 28 },
-  { id: 'humira', label: 'Humira', type: 'drug', radius: 28 },
-  { id: 'bevacizumab', label: 'Bevacizumab', type: 'drug', radius: 28 },
-  // Payers
-  { id: 'cigna', label: 'Cigna', type: 'payer', radius: 24 },
-  { id: 'uhc', label: 'UHC', type: 'payer', radius: 24 },
-  { id: 'bcbs', label: 'BCBS', type: 'payer', radius: 24 },
-  // Criteria
-  { id: 'pa', label: 'Prior Auth', type: 'criteria', radius: 20 },
-  { id: 'step', label: 'Step Therapy', type: 'criteria', radius: 20 },
-  { id: 'home', label: 'Home Infusion', type: 'criteria', radius: 20 },
-  // Indications
-  { id: 'oncology', label: 'Oncology', type: 'indication', radius: 18 },
-  { id: 'autoimmune', label: 'Autoimmune', type: 'indication', radius: 18 },
-  { id: 'rheum', label: 'Rheumatology', type: 'indication', radius: 18 },
-]
-
-const edges: GraphEdge[] = [
-  // Cigna → drugs
-  { source: 'cigna', target: 'rituximab', type: 'covers', label: 'PA+ST', color: '#3b82f6' },
-  { source: 'cigna', target: 'humira', type: 'covers', label: 'PA+ST', color: '#3b82f6' },
-  // UHC → drugs
-  { source: 'uhc', target: 'rituximab', type: 'covers', label: 'PA only', color: '#22c55e' },
-  { source: 'uhc', target: 'humira', type: 'covers', label: 'PA only', color: '#22c55e' },
-  // BCBS → drugs
-  { source: 'bcbs', target: 'rituximab', type: 'covers', label: 'PA+ST', color: '#8b5cf6' },
-  { source: 'bcbs', target: 'humira', type: 'covers', label: 'PA+ST', color: '#8b5cf6' },
-  // Drugs → criteria
-  { source: 'rituximab', target: 'pa', type: 'requires', color: '#f59e0b' },
-  { source: 'rituximab', target: 'step', type: 'requires', color: '#f59e0b' },
-  { source: 'humira', target: 'pa', type: 'requires', color: '#f59e0b' },
-  { source: 'humira', target: 'step', type: 'requires', color: '#f59e0b' },
-  { source: 'uhc', target: 'home', type: 'covers', color: '#22c55e' },
-  // Drugs → indications
-  { source: 'rituximab', target: 'oncology', type: 'treats', color: '#ec4899' },
-  { source: 'rituximab', target: 'autoimmune', type: 'treats', color: '#ec4899' },
-  { source: 'humira', target: 'autoimmune', type: 'treats', color: '#ec4899' },
-  { source: 'humira', target: 'rheum', type: 'treats', color: '#ec4899' },
-  { source: 'bevacizumab', target: 'oncology', type: 'treats', color: '#ec4899' },
-]
 
 const typeColors: Record<string, string> = {
   drug: '#3b82f6',
   payer: '#22c55e',
   criteria: '#f59e0b',
-  indication: '#ec4899',
 }
 
 const typeLabels: Record<string, string> = {
   drug: 'Drugs',
   payer: 'Payers',
   criteria: 'Requirements',
-  indication: 'Indications',
 }
 
 export function KnowledgeGraph() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const nodesRef = useRef<GraphNode[]>([])
+  const edgesRef = useRef<GraphEdge[]>([])
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 })
+  const [loading, setLoading] = useState(true)
   const animFrameRef = useRef<number>(0)
   const mouseRef = useRef({ x: 0, y: 0, isDragging: false, dragNode: null as GraphNode | null })
 
-  // Initialize nodes with positions
+  // Fetch real data from matrix API and build graph
   useEffect(() => {
-    const cx = dimensions.width / 2
-    const cy = dimensions.height / 2
-    
-    nodesRef.current = initialNodes.map((n, i) => {
-      const angle = (i / initialNodes.length) * Math.PI * 2
-      const typeRadius = n.type === 'drug' ? 80 : n.type === 'payer' ? 160 : n.type === 'criteria' ? 120 : 200
-      return {
-        ...n,
-        x: cx + Math.cos(angle) * typeRadius + (Math.random() - 0.5) * 60,
-        y: cy + Math.sin(angle) * typeRadius + (Math.random() - 0.5) * 60,
-        vx: 0,
-        vy: 0,
-      }
-    })
+    fetch(`${API_BASE}/matrix`)
+      .then(r => r.json())
+      .then(data => {
+        const nodes: Omit<GraphNode, 'x' | 'y' | 'vx' | 'vy'>[] = []
+        const edges: GraphEdge[] = []
+
+        // Criteria nodes
+        nodes.push({ id: 'pa', label: 'Prior Auth', type: 'criteria', radius: 22 })
+        nodes.push({ id: 'step', label: 'Step Therapy', type: 'criteria', radius: 22 })
+
+        // Payer nodes
+        const shortNames: Record<string, string> = {
+          'Blue Cross Blue Shield': 'BCBS',
+          'UnitedHealthcare': 'UHC',
+          'Priority Health': 'Priority',
+          'UPMC Health Plan': 'UPMC',
+        }
+        for (const p of data.payers || []) {
+          nodes.push({
+            id: p.payer_id,
+            label: shortNames[p.payer_name] || p.payer_name,
+            type: 'payer',
+            radius: 26,
+          })
+        }
+
+        // Drug nodes
+        for (const d of data.drugs || []) {
+          // Use short brand name
+          const brand = d.drug_name.match(/\(([^)]+)\)/)?.[1] || d.drug_name.split(' ')[0]
+          nodes.push({
+            id: d.drug_id,
+            label: brand,
+            type: 'drug',
+            radius: 24,
+          })
+        }
+
+        // Build edges from matrix rows
+        const drugPaSet = new Set<string>()
+        const drugStSet = new Set<string>()
+        for (const row of data.rows || []) {
+          const drugId = row.drug?.drug_id
+          if (!drugId) continue
+          for (const [payerId, cell] of Object.entries(row.cells || {})) {
+            const pol = (cell as any)?.policy
+            if (!pol) continue
+            const covered = pol.covered
+            const pa = pol.prior_auth
+            const st = pol.step_therapy
+
+            if (covered) {
+              const parts: string[] = []
+              if (pa) parts.push('PA')
+              if (st) parts.push('ST')
+              edges.push({
+                source: payerId,
+                target: drugId,
+                type: 'covers',
+                label: parts.length ? parts.join('+') : 'No restrictions',
+                color: '#22c55e',
+              })
+            } else {
+              edges.push({
+                source: payerId,
+                target: drugId,
+                type: 'not-covered',
+                label: 'Not covered',
+                color: '#ef4444',
+              })
+            }
+
+            // Drug → criteria edges (deduplicated)
+            if (pa && !drugPaSet.has(drugId)) {
+              drugPaSet.add(drugId)
+              edges.push({ source: drugId, target: 'pa', type: 'requires', color: '#f59e0b' })
+            }
+            if (st && !drugStSet.has(drugId)) {
+              drugStSet.add(drugId)
+              edges.push({ source: drugId, target: 'step', type: 'requires', color: '#f59e0b' })
+            }
+          }
+        }
+
+        // Position nodes
+        const cx = dimensions.width / 2
+        const cy = dimensions.height / 2
+        nodesRef.current = nodes.map((n, i) => {
+          const angle = (i / nodes.length) * Math.PI * 2
+          const r = n.type === 'drug' ? 160 : n.type === 'payer' ? 280 : 100
+          return {
+            ...n,
+            x: cx + Math.cos(angle) * r + (Math.random() - 0.5) * 60,
+            y: cy + Math.sin(angle) * r + (Math.random() - 0.5) * 60,
+            vx: 0,
+            vy: 0,
+          }
+        })
+        edgesRef.current = edges
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [dimensions])
 
   // Resize observer
@@ -152,13 +199,13 @@ export function KnowledgeGraph() {
           const dx = node.x - other.x
           const dy = node.y - other.y
           const dist = Math.sqrt(dx * dx + dy * dy) || 1
-          const force = 800 / (dist * dist)
+          const force = 2400 / (dist * dist)
           node.vx += (dx / dist) * force
           node.vy += (dy / dist) * force
         }
 
         // Edge attraction
-        for (const edge of edges) {
+        for (const edge of edgesRef.current) {
           if (edge.source === node.id || edge.target === node.id) {
             const otherId = edge.source === node.id ? edge.target : edge.source
             const other = nodes.find(n => n.id === otherId)
@@ -191,7 +238,7 @@ export function KnowledgeGraph() {
       ctx.save()
 
       // Draw edges
-      for (const edge of edges) {
+      for (const edge of edgesRef.current) {
         const source = nodes.find(n => n.id === edge.source)
         const target = nodes.find(n => n.id === edge.target)
         if (!source || !target) continue
@@ -199,21 +246,54 @@ export function KnowledgeGraph() {
         const isHighlighted = hoveredNode === edge.source || hoveredNode === edge.target
         const isConnectedToSelected = selectedNode && (edge.source === selectedNode.id || edge.target === selectedNode.id)
 
-        ctx.beginPath()
-        ctx.moveTo(source.x, source.y)
-        ctx.lineTo(target.x, target.y)
-        ctx.strokeStyle = isHighlighted || isConnectedToSelected
+        const dx = target.x - source.x
+        const dy = target.y - source.y
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const ux = dx / dist
+        const uy = dy / dist
+
+        // Shorten line to stop at node edge
+        const startX = source.x + ux * source.radius
+        const startY = source.y + uy * source.radius
+        const endX = target.x - ux * target.radius
+        const endY = target.y - uy * target.radius
+
+        const lineColor = isHighlighted || isConnectedToSelected
           ? edge.color
-          : hoveredNode || selectedNode ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.08)'
-        ctx.lineWidth = isHighlighted || isConnectedToSelected ? 2 : 1
+          : hoveredNode || selectedNode ? 'rgba(15, 23, 42, 0.06)' : 'rgba(15, 23, 42, 0.12)'
+        const lineWidth = isHighlighted || isConnectedToSelected ? 2 : 1
+
+        // Draw line
+        ctx.beginPath()
+        ctx.moveTo(startX, startY)
+        ctx.lineTo(endX, endY)
+        ctx.strokeStyle = lineColor
+        ctx.lineWidth = lineWidth
         ctx.stroke()
+
+        // Draw arrowhead
+        const arrowSize = isHighlighted || isConnectedToSelected ? 10 : 7
+        const angle = Math.atan2(endY - startY, endX - startX)
+        ctx.beginPath()
+        ctx.moveTo(endX, endY)
+        ctx.lineTo(
+          endX - arrowSize * Math.cos(angle - Math.PI / 7),
+          endY - arrowSize * Math.sin(angle - Math.PI / 7)
+        )
+        ctx.lineTo(
+          endX - arrowSize * Math.cos(angle + Math.PI / 7),
+          endY - arrowSize * Math.sin(angle + Math.PI / 7)
+        )
+        ctx.closePath()
+        ctx.fillStyle = lineColor
+        ctx.fill()
 
         // Edge label
         if ((isHighlighted || isConnectedToSelected) && edge.label) {
           const mx = (source.x + target.x) / 2
           const my = (source.y + target.y) / 2
           ctx.font = '10px Geist, sans-serif'
-          ctx.fillStyle = 'rgba(255,255,255,0.6)'
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.55)'
           ctx.textAlign = 'center'
           ctx.fillText(edge.label, mx, my - 5)
         }
@@ -224,9 +304,9 @@ export function KnowledgeGraph() {
         const isHovered = hoveredNode === node.id
         const isSelected = selectedNode?.id === node.id
         const isConnected = hoveredNode
-          ? edges.some(e => (e.source === hoveredNode && e.target === node.id) || (e.target === hoveredNode && e.source === node.id))
+          ? edgesRef.current.some(e => (e.source === hoveredNode && e.target === node.id) || (e.target === hoveredNode && e.source === node.id))
           : selectedNode
-          ? edges.some(e => (e.source === selectedNode.id && e.target === node.id) || (e.target === selectedNode.id && e.source === node.id))
+          ? edgesRef.current.some(e => (e.source === selectedNode.id && e.target === node.id) || (e.target === selectedNode.id && e.source === node.id))
           : false
         const isDimmed = (hoveredNode || selectedNode) && !isHovered && !isSelected && !isConnected
 
@@ -255,7 +335,7 @@ export function KnowledgeGraph() {
 
         // Label
         ctx.font = `${isHovered ? 'bold ' : ''}11px Geist, sans-serif`
-        ctx.fillStyle = isDimmed ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.9)'
+        ctx.fillStyle = isDimmed ? 'rgba(100, 116, 139, 0.45)' : 'rgba(15, 23, 42, 0.92)'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(node.label, node.x, node.y)
@@ -267,7 +347,7 @@ export function KnowledgeGraph() {
 
     tick()
     return () => cancelAnimationFrame(animFrameRef.current)
-  }, [dimensions, hoveredNode, selectedNode])
+  }, [dimensions, hoveredNode, selectedNode, loading])
 
   // Mouse handlers
   const getNodeAtPosition = useCallback((px: number, py: number): GraphNode | null => {
@@ -329,7 +409,7 @@ export function KnowledgeGraph() {
   }, [getNodeAtPosition])
 
   const connectedEdges = selectedNode
-    ? edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id)
+    ? edgesRef.current.filter(e => e.source === selectedNode.id || e.target === selectedNode.id)
     : []
 
   return (
@@ -337,8 +417,8 @@ export function KnowledgeGraph() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center">
-            <Network className="w-5 h-5 text-cyan-400" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500/12 to-primary/10 ring-1 ring-border flex items-center justify-center">
+            <Network className="w-5 h-5 text-primary" />
           </div>
           <div>
             <h2 className="text-xl font-bold">Knowledge Graph</h2>
@@ -368,7 +448,12 @@ export function KnowledgeGraph() {
       </div>
 
       {/* Canvas */}
-      <div ref={containerRef} className="glass-card rounded-xl overflow-hidden relative" style={{ height: 450 }}>
+      <div ref={containerRef} className="glass-card rounded-xl overflow-hidden relative" style={{ height: 550 }}>
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-background/50">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          </div>
+        )}
         <canvas
           ref={canvasRef}
           style={{ width: dimensions.width, height: dimensions.height, cursor: hoveredNode ? 'pointer' : 'default' }}

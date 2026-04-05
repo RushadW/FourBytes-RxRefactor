@@ -517,11 +517,16 @@ def seed_all():
             _generate_pdf(raw_text, p["policy_title"], pdf_path)
 
         # Document record
+        _PAYER_POLICY_URLS = {
+            "cigna": "https://static.cigna.com/assets/chcp/resourceLibrary/coveragePolicies/pharmacy_a-z.html",
+            "uhc": "https://www.uhcprovider.com/en/policies-protocols/commercial-policies/commercial-medical-drug-policies.html",
+            "bcbs": "https://www.bluecrossnc.com/providers/prior-authorization/prescription-drugs",
+        }
         doc = DocumentRecord(
             id=doc_id,
             payer_id=p["payer_id"],
             drug_id=p["drug_id"],
-            source_url=f"https://example.com/policies/{raw_key}",
+            source_url=_PAYER_POLICY_URLS.get(p["payer_id"], ""),
             file_path=str(pdf_path),
             file_hash=str(hash(raw_text)),
             content_type="pdf",

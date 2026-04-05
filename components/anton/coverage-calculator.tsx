@@ -115,10 +115,10 @@ export function CoverageCalculator() {
   const progress = result ? 100 : (history.length / (decisionTree.length - 1)) * 100
 
   const resultConfig = {
-    approved: { icon: <CheckCircle2 className="w-8 h-8" />, color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/30', label: 'Likely Approved' },
-    denied: { icon: <XCircle className="w-8 h-8" />, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30', label: 'Likely Denied' },
-    'step-therapy': { icon: <AlertTriangle className="w-8 h-8" />, color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30', label: 'Step Therapy Required' },
-    'more-info': { icon: <AlertTriangle className="w-8 h-8" />, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/30', label: 'More Information Needed' },
+    approved: { icon: <CheckCircle2 className="w-8 h-8" />, color: 'text-emerald-700', bg: 'bg-emerald-500/10 border-emerald-500/30', label: 'Likely Approved' },
+    denied: { icon: <XCircle className="w-8 h-8" />, color: 'text-red-700', bg: 'bg-red-500/10 border-red-500/30', label: 'Likely Denied' },
+    'step-therapy': { icon: <AlertTriangle className="w-8 h-8" />, color: 'text-amber-700', bg: 'bg-amber-500/10 border-amber-500/30', label: 'Step Therapy Required' },
+    'more-info': { icon: <AlertTriangle className="w-8 h-8" />, color: 'text-primary', bg: 'bg-primary/10 border-primary/25', label: 'More Information Needed' },
   }
 
   return (
@@ -126,8 +126,8 @@ export function CoverageCalculator() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-            <TreePine className="w-5 h-5 text-purple-400" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/12 to-primary/10 ring-1 ring-border flex items-center justify-center">
+            <TreePine className="w-5 h-5 text-primary" />
           </div>
           <div>
             <h2 className="text-xl font-bold">Coverage Calculator</h2>

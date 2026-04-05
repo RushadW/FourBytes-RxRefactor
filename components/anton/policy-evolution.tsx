@@ -464,7 +464,7 @@ export function PolicyEvolution() {
                   'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
                   selectedDrug === drug.id
                     ? 'bg-primary text-white shadow-sm'
-                    : 'bg-white text-foreground/70 border border-border hover:border-primary/30'
+                    : 'bg-card text-foreground/70 border border-border hover:border-primary/30'
                 )}
               >
                 {drug.name}
@@ -483,7 +483,7 @@ export function PolicyEvolution() {
                 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
                 !selectedPayer
                   ? 'bg-primary text-white shadow-sm'
-                  : 'bg-white text-foreground/70 border border-border hover:border-primary/30'
+                  : 'bg-card text-foreground/70 border border-border hover:border-primary/30'
               )}
             >
               All Payers
@@ -498,7 +498,7 @@ export function PolicyEvolution() {
                     'px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5',
                     selectedPayer === id
                       ? `${colors?.bg} ${colors?.text} border ${colors?.border}`
-                      : 'bg-white text-foreground/70 border border-border hover:border-primary/30'
+                      : 'bg-card text-foreground/70 border border-border hover:border-primary/30'
                   )}
                 >
                   <div className={cn('w-2 h-2 rounded-full', colors?.dot)} />

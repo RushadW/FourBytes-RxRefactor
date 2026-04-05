@@ -18,12 +18,11 @@ const PAYER_COLORS = [
 ]
 
 function getPayerStyle(payerId: string, payerName: string, index: number) {
-  const short = payerName.length > 12
-    ? payerName.split(/\s+/).map(w => w[0]).join('').toUpperCase()
-    : payerName
+  const label = (payerName || payerId).trim() || payerId
   return {
-    label: payerName,
-    short,
+    label,
+    /** Same as label — full payer names for clarity (no initials). */
+    short: label,
     color: PAYER_COLORS[index % PAYER_COLORS.length],
   }
 }
@@ -163,11 +162,13 @@ function ComparisonTable({ drug, policies, activePayers, payerStyles }: {
               return (
                 <th key={c.payerId}
                   className={cn(
-                    'text-center px-5 pt-5 pb-4 min-w-[140px]',
+                    'text-center px-3 pt-5 pb-4 min-w-[100px] max-w-[200px]',
                     isBest && 'bg-primary/[0.02] border-x border-t border-primary/10 rounded-t-xl'
                   )}
                 >
-                  <div className={cn('text-base font-bold', s?.color)}>{s?.short}</div>
+                  <div className={cn('text-xs font-bold leading-snug break-words hyphens-auto', s?.color)} title={s?.label}>
+                    {s?.label ?? c.payerId}
+                  </div>
                   <div className="h-5 flex items-center justify-center mt-1">
                     {isBest && (
                       <span className="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
@@ -217,7 +218,7 @@ function PolicyCard({ policy, payerId, payerStyles }: {
 }) {
   const style = payerStyles[payerId] || { label: payerId, short: payerId, color: 'text-indigo-600' }
   return (
-    <div className="bg-white rounded-xl border border-border/60 overflow-hidden">
+    <div className="bg-card rounded-xl border border-border/70 overflow-hidden">
       <div className="px-5 py-4 border-b border-border/30">
         <div className="flex items-center justify-between">
           <div>
@@ -347,19 +348,40 @@ export function PolicyCompare() {
     return styles
   }, [matrix])
 
-  // Build Drug objects from matrix data
+  // Build Drug objects from matrix + first real policy per row (generic/category/area)
   const drugObjects = useMemo(() => {
     if (!matrix) return new Map<string, Drug>()
     const m = new Map<string, Drug>()
-    matrix.drugs.forEach(d => {
+    for (const d of matrix.drugs) {
+      const row = matrix.rows.find(r => r.drug.drug_id === d.drug_id)
+      const rowDrug = row?.drug
+      const firstPolicy =
+        row &&
+        (Object.values(row.cells)
+          .map(c => c.policy)
+          .find(p => p != null) ?? null)
+
+      const genericName =
+        rowDrug?.generic_name?.trim() ||
+        firstPolicy?.generic_name?.trim() ||
+        ''
+      const drugCategory =
+        rowDrug?.drug_category?.trim() ||
+        firstPolicy?.drug_category?.trim() ||
+        ''
+      const therapeuticArea =
+        rowDrug?.therapeutic_area?.trim() ||
+        firstPolicy?.therapeutic_area?.trim() ||
+        ''
+
       m.set(d.drug_id, {
         id: d.drug_id,
         name: d.drug_name,
-        genericName: d.drug_id,
-        therapeuticArea: '',
-        drugCategory: '',
+        genericName,
+        therapeuticArea,
+        drugCategory,
       })
-    })
+    }
     return m
   }, [matrix])
 
@@ -415,7 +437,7 @@ export function PolicyCompare() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-border/60 p-4 space-y-3 soft-shadow">
+      <div className="bg-card rounded-xl border border-border/70 p-4 space-y-3 soft-shadow">
         <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
           <Filter className="w-3.5 h-3.5" /> Filters
         </div>
@@ -431,9 +453,9 @@ export function PolicyCompare() {
                     className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
                       selectedPayers.includes(p.payer_id)
                         ? 'bg-primary text-white border-primary'
-                        : 'bg-white text-foreground/70 border-border hover:border-primary/30'
+                        : 'bg-card text-foreground/70 border-border hover:border-primary/30'
                     )}>
-                    {s?.short || p.payer_name}
+                    {p.payer_name}
                   </button>
                 )
               })}
@@ -449,7 +471,7 @@ export function PolicyCompare() {
                   className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
                     selectedDrugs.includes(d.drug_id)
                       ? 'bg-primary text-white border-primary'
-                      : 'bg-white text-foreground/70 border-border hover:border-primary/30'
+                      : 'bg-card text-foreground/70 border-border hover:border-primary/30'
                   )}>{d.drug_name}</button>
               ))}
             </div>
@@ -467,7 +489,7 @@ export function PolicyCompare() {
 
         return (
           <motion.div key={drugId}
-            className="bg-white rounded-2xl border border-border/60 overflow-hidden soft-shadow"
+            className="bg-card rounded-2xl border border-border/70 overflow-hidden soft-shadow"
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
           >
             {/* Drug header bar */}
@@ -477,12 +499,17 @@ export function PolicyCompare() {
                   <Pill className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <div className="flex items-baseline gap-2">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <h2 className="text-base font-bold text-foreground">{drug.name}</h2>
-                    <span className="text-xs text-muted-foreground">({drug.genericName})</span>
+                    {drug.genericName &&
+                      drug.genericName.toLowerCase() !== drug.name.toLowerCase() && (
+                        <span className="text-xs text-muted-foreground">({drug.genericName})</span>
+                      )}
                   </div>
-                  {drug.drugCategory && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{drug.drugCategory} · {drug.therapeuticArea}</p>
+                  {(drug.drugCategory || drug.therapeuticArea) && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {[drug.drugCategory, drug.therapeuticArea].filter(Boolean).join(' · ')}
+                    </p>
                   )}
                 </div>
               </div>
@@ -492,7 +519,7 @@ export function PolicyCompare() {
                   'flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all border',
                   isDetailOpen
                     ? 'bg-primary text-white border-primary'
-                    : 'bg-white text-foreground/60 border-border hover:border-primary/30 hover:text-foreground'
+                    : 'bg-card text-foreground/60 border-border hover:border-primary/30 hover:text-foreground'
                 )}
               >
                 <Eye className="w-3.5 h-3.5" />
@@ -534,21 +561,22 @@ export function PolicyCompare() {
                           {(() => {
                             const covered = existingPolicies.filter(p => p.covered)
                             const notCovered = existingPolicies.filter(p => !p.covered)
-                            const noPolicyPayers = selectedPayers.filter(pid => !existingPolicies.find(p => p.payerId === pid)).map(pid => payerStyles[pid]?.short || pid)
-                            if (covered.length === 0) return <>No selected payers currently cover {drug.name}.{notCovered.length > 0 && <> {notCovered.map(p => payerStyles[p.payerId]?.short || p.payerId).join(' and ')} explicitly exclude it.</>}{noPolicyPayers.length > 0 && <> {noPolicyPayers.join(' and ')}: no policy found.</>}</>
+                            const payerLabel = (pid: string) => payerStyles[pid]?.label || existingPolicies.find(x => x.payerId === pid)?.payerName || pid
+                            const noPolicyPayers = selectedPayers.filter(pid => !existingPolicies.find(p => p.payerId === pid)).map(payerLabel)
+                            if (covered.length === 0) return <>No selected payers currently cover {drug.name}.{notCovered.length > 0 && <> {notCovered.map(p => payerLabel(p.payerId)).join(' and ')} explicitly exclude it.</>}{noPolicyPayers.length > 0 && <> {noPolicyPayers.join(' and ')}: no policy found.</>}</>
                             const best = covered.reduce((a, b) => {
                               const aS = (a.accessStatus === 'preferred' ? 3 : 1) + (a.stepTherapy ? 0 : 2) + a.siteOfCare.length
                               const bS = (b.accessStatus === 'preferred' ? 3 : 1) + (b.stepTherapy ? 0 : 2) + b.siteOfCare.length
                               return aS >= bS ? a : b
                             })
-                            const pref = covered.filter(p => p.accessStatus === 'preferred').map(p => payerStyles[p.payerId]?.short || p.payerId)
-                            const st = covered.filter(p => p.stepTherapy).map(p => payerStyles[p.payerId]?.short || p.payerId)
+                            const pref = covered.filter(p => p.accessStatus === 'preferred').map(p => payerLabel(p.payerId))
+                            const st = covered.filter(p => p.stepTherapy).map(p => payerLabel(p.payerId))
                             return <>
-                              <strong>{payerStyles[best.payerId]?.short || best.payerId}</strong> offers the best access path for {drug.name}
+                              <strong>{payerLabel(best.payerId)}</strong> offers the best access path for {drug.name}
                               {best.accessStatus === 'preferred' && ' with preferred status'}.
                               {pref.length > 0 && pref.length < covered.length && <> {pref.join(' and ')} list it as preferred.</>}
                               {st.length > 0 && <> {st.join(' and ')} require step therapy.</>}
-                              {notCovered.length > 0 && <> {notCovered.map(p => payerStyles[p.payerId]?.short || p.payerId).join(' and ')} do not cover this drug.</>}
+                              {notCovered.length > 0 && <> {notCovered.map(p => payerLabel(p.payerId)).join(' and ')} do not cover this drug.</>}
                               {noPolicyPayers.length > 0 && <> {noPolicyPayers.join(' and ')}: no policy found.</>}
                               {' '}{covered.length} of {selectedPayers.length} selected payers cover this drug.
                             </>

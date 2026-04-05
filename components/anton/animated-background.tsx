@@ -4,12 +4,13 @@ import { motion } from 'framer-motion'
 
 export function AnimatedBackground({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-screen bg-background overflow-hidden">
+    <div className="relative min-h-screen bg-transparent overflow-hidden">
       {/* Grid pattern */}
-      <div className="fixed inset-0 grid-bg pointer-events-none" />
+      <div className="fixed inset-0 grid-bg pointer-events-none z-0" />
+      <div className="noise-overlay" aria-hidden />
       
       {/* Animated orbs */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <motion.div
           className="orb orb-blue w-[600px] h-[600px] -top-40 -left-40"
           animate={{
@@ -51,7 +52,7 @@ export function AnimatedBackground({ children }: { children: React.ReactNode }) 
       </div>
       
       {/* Content */}
-      <div className="relative z-10">
+      <div className="relative z-10 isolate">
         {children}
       </div>
     </div>

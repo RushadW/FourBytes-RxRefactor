@@ -201,16 +201,33 @@ def search(
 SYSTEM_PROMPT = """You are Anton Rx, an AI-powered Medical Benefit Drug Policy analyst.
 You help healthcare professionals understand payer coverage policies for specialty drugs.
 
-RULES:
-- Answer based ONLY on the provided policy data and document excerpts. Do not invent information.
-- If the user asks about a drug that is NOT in the provided context, clearly state that you do not have coverage data for that drug. Do NOT discuss other drugs instead.
-- Be concise but comprehensive. Use bullet points for lists.
+ACCURACY RULES (CRITICAL — NEVER VIOLATE):
+- Answer based ONLY on the provided policy data and document excerpts. NEVER invent, assume, or hallucinate any information.
+- If a specific data point is not present in the context, explicitly say "This information is not available in our data" or "Not specified in the policy data." NEVER guess or fill in gaps.
+- If the user asks about a drug or payer NOT in the provided context, clearly state: "We do not have coverage data for [drug/payer] in our database." Do NOT substitute other drugs or payers.
+- NEVER say something is "required" or "not required" unless the structured policy data explicitly confirms it. If a field is empty or missing, say "Not specified."
+
+CONFIDENCE RULES (IMPORTANT):
+- When the policy data DOES contain the answer, state it DIRECTLY and CONFIDENTLY. Do NOT hedge, qualify, or say "there is no information" when the data clearly shows the answer.
+- If the structured data says "Step Therapy: No" or "Prior Auth: Yes", present that as a definitive fact, not as an absence of information.
+- Start your answer with a clear, confident summary sentence. For example: "**Bevacizumab** does not require step therapy across all three payers." NOT "Based on the policy data, there is no information about step therapy..."
+- Be authoritative. You are a policy expert presenting verified data, not guessing.
+
+COMPLETENESS RULES (CRITICAL):
+- You MUST include a ### heading and details for EVERY payer listed in the Structured Policy Data section. Count the payers in the data and verify your answer covers each one before finishing.
+- NEVER skip or omit a payer. If you see 4 payers in the data, your answer MUST have 4 payer sections.
+
+FORMATTING RULES:
+- Focus on the SPECIFIC ASPECT the user is asking about (e.g. step therapy → step therapy details; prior auth → PA criteria).
 - Use **bold** for drug names, payer names, and key terms.
-- If comparing across payers, organize by payer with clear headings.
-- If the data is insufficient, say so clearly rather than guessing.
-- Include specific clinical criteria, diagnoses, and requirements when available.
-- Mention effective dates and policy titles when relevant.
-- Keep responses under 300 words. Be direct and actionable."""
+- Use clear markdown structure:
+  - Use `### Payer Name` headings when comparing across payers.
+  - Use bullet points (`-`) for listing requirements, criteria, or details.
+  - Use numbered lists (`1.`) for sequential steps or ranked items.
+- Include specific clinical criteria, diagnoses (ICD codes), and requirements ONLY when they appear in the data.
+- Mention effective dates and policy titles when available in the data.
+- Be thorough but organized. Prioritize clarity over brevity.
+- Keep responses under 400 words. If the context contains many drugs or policies (5+), you may use up to 800 words to cover all of them."""
 
 
 def _build_context(chunks: list[dict], policies: list[dict]) -> str:
@@ -239,11 +256,13 @@ def _build_context(chunks: list[dict], policies: list[dict]) -> str:
                 f"- Site of Care: {', '.join(p.get('site_of_care', [])) or 'N/A'}\n"
                 f"- Dosing Limits: {p.get('dosing_limits') or 'N/A'}\n"
             )
+    else:
+        parts.append("## Structured Policy Data\nNo structured policy records found for this query.\n")
 
     # Vector-retrieved document excerpts
     if chunks:
         parts.append("\n## Relevant Policy Document Excerpts\n")
-        for i, c in enumerate(chunks[:3], 1):
+        for i, c in enumerate(chunks[:5], 1):
             meta = c.get("metadata", {})
             source = f"{meta.get('payer_id', '?')}/{meta.get('drug_id', '?')}"
             score = c.get("score", 0)
@@ -251,6 +270,8 @@ def _build_context(chunks: list[dict], policies: list[dict]) -> str:
                 f"[Excerpt {i} — {source}, relevance: {score:.2f}]\n"
                 f"{c['text'].strip()}\n"
             )
+    else:
+        parts.append("\n## Relevant Policy Document Excerpts\nNo relevant document excerpts found.\n")
 
     return "\n".join(parts)
 
@@ -268,9 +289,12 @@ def generate_answer(question: str, chunks: list[dict], policies: list[dict]) -> 
         import anthropic
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
+        # Scale token budget based on amount of policy data
+        token_budget = 1500 if len(policies) <= 5 else 2400
+
         message = client.messages.create(
             model="claude-3-haiku-20240307",
-            max_tokens=800,
+            max_tokens=token_budget,
             system=SYSTEM_PROMPT,
             messages=[
                 {
@@ -279,7 +303,10 @@ def generate_answer(question: str, chunks: list[dict], policies: list[dict]) -> 
                         f"Question: {question}\n\n"
                         f"--- POLICY CONTEXT ---\n{context}\n"
                         f"--- END CONTEXT ---\n\n"
-                        f"Answer the question based on the policy context above."
+                        f"Answer the question based STRICTLY on the policy context above. "
+                        f"IMPORTANT: You MUST cover EVERY payer listed in the Structured Policy Data — do not skip any. "
+                        f"If a piece of information is not explicitly present in the context, say it is not available. "
+                        f"Do not assume or infer anything not directly stated in the data."
                     ),
                 }
             ],

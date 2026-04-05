@@ -1,7 +1,9 @@
 """FastAPI routes — all API endpoints."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import tempfile
 import time
 from pathlib import Path
 
@@ -372,8 +374,8 @@ def ask_question(req: AskRequest, db: Session = Depends(get_db)):
         _PAYER_MAP = {
             "cigna": "cigna",
             "uhc": "uhc", "united": "uhc", "unitedhealthcare": "uhc",
-            "bcbs": "bcbs_nc", "blue cross": "bcbs_nc", "blue shield": "bcbs_nc",
-            "upmc": "upmc", "priority health": "priority_health",
+            "bcbs": "bcbs", "blue cross": "bcbs", "blue shield": "bcbs",
+            "upmc": "upmc", "priority health": "priority_health", "priority": "priority_health",
             "emblem": "emblemhealth", "emblemhealth": "emblemhealth",
             "florida blue": "florida_blue",
         }
@@ -383,9 +385,9 @@ def ask_question(req: AskRequest, db: Session = Depends(get_db)):
             payer_ids = list({v for k, v in _PAYER_MAP.items() if k in q_lower})
 
     # More chunks for multi-payer/drug comparison queries
-    n_chunks = 3
+    n_chunks = 5
     if len(drug_ids) > 1 or len(payer_ids) > 1 or not payer_ids:
-        n_chunks = 5
+        n_chunks = 8
 
     chunks = rag_search(
         req.question,
@@ -401,11 +403,16 @@ def ask_question(req: AskRequest, db: Session = Depends(get_db)):
     # Gather relevant structured policies + document URLs
     policy_ids = {c["metadata"].get("policy_id") for c in chunks if c.get("metadata")}
 
-    # Also pull in DB policies for the detected drugs so the answer covers all payers
+    # Also pull in DB policies for the detected drugs/payers so the answer is comprehensive
     if drug_ids:
         q_db = db.query(PolicyRecord).filter(PolicyRecord.drug_id.in_(drug_ids))
         if payer_ids:
             q_db = q_db.filter(PolicyRecord.payer_id.in_(payer_ids))
+        for p in q_db.all():
+            policy_ids.add(p.id)
+    elif payer_ids:
+        # Payer-wide query (no specific drug) — pull all policies for the payer
+        q_db = db.query(PolicyRecord).filter(PolicyRecord.payer_id.in_(payer_ids))
         for p in q_db.all():
             policy_ids.add(p.id)
 
@@ -755,3 +762,41 @@ def trigger_scrape_now(db: Session = Depends(get_db)):
     from app.scheduler import run_scrape_now
     result = run_scrape_now(trigger="manual")
     return result
+
+
+# ---------- Text-to-Speech (Microsoft Neural Voices via edge-tts) ----------
+
+from pydantic import BaseModel as _PydanticBase
+
+
+class TTSRequest(_PydanticBase):
+    text: str
+    voice: str = "en-US-AriaNeural"  # Default: natural female US voice
+
+
+@router.post("/tts")
+async def text_to_speech(req: TTSRequest):
+    """Convert text to speech using Microsoft neural voices. Returns MP3 audio."""
+    import edge_tts
+
+    # Limit text length to prevent abuse
+    text = req.text[:3000]
+    if not text.strip():
+        raise HTTPException(400, "Text cannot be empty")
+
+    # Generate audio to a temp file
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+    tmp.close()
+
+    try:
+        communicate = edge_tts.Communicate(text, req.voice, rate="-5%", pitch="+0Hz")
+        await communicate.save(tmp.name)
+    except Exception as e:
+        Path(tmp.name).unlink(missing_ok=True)
+        raise HTTPException(500, f"TTS generation failed: {e}")
+
+    return FileResponse(
+        tmp.name,
+        media_type="audio/mpeg",
+        filename="speech.mp3",
+    )

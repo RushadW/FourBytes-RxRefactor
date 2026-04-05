@@ -1,121 +1,102 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bell, AlertTriangle, CheckCircle2, Info, TrendingUp, TrendingDown,
-  Calendar, Filter, ChevronDown, ExternalLink, Flame,
+  Calendar, Filter, ChevronDown, ExternalLink, Flame, Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { fetchNotifications, type Notification } from '@/lib/api'
 
-interface PolicyAlert {
-  id: string
-  payer: string
-  drug: string
-  change: string
-  details: string
-  date: string
-  severity: 'critical' | 'warning' | 'info' | 'positive'
-  category: 'restriction' | 'expansion' | 'new-policy' | 'update'
-  trend?: 'up' | 'down' | 'neutral'
+type Severity = 'critical' | 'warning' | 'info' | 'positive'
+
+function classifySeverity(notif: Notification): Severity {
+  const msg = notif.message.toLowerCase()
+  // Removed coverage / major restrictions → critical
+  if (msg.includes('removed') && (msg.includes('covered') || msg.includes('access'))) return 'critical'
+  // Step therapy or PA added → warning
+  if (msg.includes('changed from "false" to "true"') && (msg.includes('prior auth') || msg.includes('step therapy'))) return 'warning'
+  // Coverage expanded / restrictions removed → positive
+  if (msg.includes('changed from "true" to "false"') && (msg.includes('prior auth') || msg.includes('step therapy'))) return 'positive'
+  if (msg.includes('expansion') || msg.includes('added')) return 'positive'
+  // Default to info
+  return 'info'
 }
 
-const alerts: PolicyAlert[] = [
-  {
-    id: '1',
-    payer: 'Cigna',
-    drug: 'Rituximab',
-    change: 'Step therapy requirement increased to 12 weeks methotrexate',
-    details: 'Previous requirement was 8 weeks. This adds ~4 weeks to the treatment timeline for autoimmune indications. Oncology indications unaffected.',
-    date: '2026-03-28',
-    severity: 'critical',
-    category: 'restriction',
-    trend: 'down',
-  },
-  {
-    id: '2',
-    payer: 'UnitedHealthcare',
-    drug: 'Rituximab',
-    change: 'Home infusion now covered with nurse supervision',
-    details: 'UHC expanded site-of-care options. Home infusion is now covered when supervised by a certified infusion nurse. This is a significant improvement for patient convenience.',
-    date: '2026-03-15',
-    severity: 'positive',
-    category: 'expansion',
-    trend: 'up',
-  },
-  {
-    id: '3',
-    payer: 'Cigna',
-    drug: 'Humira',
-    change: 'Biosimilar step therapy now required for new starts',
-    details: 'All new Humira starts must try an approved biosimilar first. Existing patients are grandfathered for 6 months. Applies to all indications.',
-    date: '2026-03-10',
-    severity: 'warning',
-    category: 'restriction',
-    trend: 'down',
-  },
-  {
-    id: '4',
-    payer: 'Blue Cross Blue Shield',
-    drug: 'Rituximab',
-    change: 'Updated criteria: specialist treatment plan now required',
-    details: 'BCBS added requirement for a documented treatment plan from a board-certified specialist. General practitioners can no longer submit PA independently.',
-    date: '2026-02-20',
-    severity: 'warning',
-    category: 'update',
-    trend: 'down',
-  },
-  {
-    id: '5',
-    payer: 'UnitedHealthcare',
-    drug: 'Humira',
-    change: 'PA turnaround reduced from 5 to 3 business days',
-    details: 'UHC streamlined their prior authorization review process. Digital submissions via CoverMyMeds now have a 3-day guaranteed turnaround.',
-    date: '2026-02-01',
-    severity: 'positive',
-    category: 'expansion',
-    trend: 'up',
-  },
-  {
-    id: '6',
-    payer: 'Cigna',
-    drug: 'Bevacizumab',
-    change: 'New off-label coverage for age-related macular degeneration',
-    details: 'Cigna now covers Bevacizumab for AMD under a new medical policy. This is significant as it provides a lower-cost alternative to Lucentis/Eylea.',
-    date: '2026-01-15',
-    severity: 'info',
-    category: 'new-policy',
-    trend: 'up',
-  },
-]
+function extractChangeSummary(notif: Notification): string {
+  // Take the first change from the message (before the first semicolon)
+  const first = notif.message.split(';')[0].trim()
+  return first.length > 120 ? first.slice(0, 117) + '...' : first
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function extractPayer(notif: Notification): string {
+  // Extract payer name from title like "Cigna updated ..."
+  const match = notif.title.match(/^(.+?) updated/)
+  return match ? match[1] : notif.payer_id || 'Unknown'
+}
+
+function extractDrug(notif: Notification): string {
+  // Extract drug name from title like "... updated Rituximab (Rituxan) policy"
+  const match = notif.title.match(/updated (.+?) policy/)
+  return match ? match[1] : notif.drug_id || 'Unknown'
+}
+
+/** Count of items on the Alerts page feed (sidebar badge uses this; not API notifications). */
+export const SMART_ALERTS_FEED_COUNT = 0 // kept for backward compat, sidebar now uses API
 
 const severityConfig = {
-  critical: { icon: <Flame className="w-4 h-4" />, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20', badge: 'bg-red-500/20 text-red-400' },
-  warning: { icon: <AlertTriangle className="w-4 h-4" />, color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/20', badge: 'bg-yellow-500/20 text-yellow-400' },
-  info: { icon: <Info className="w-4 h-4" />, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', badge: 'bg-blue-500/20 text-blue-400' },
-  positive: { icon: <CheckCircle2 className="w-4 h-4" />, color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/20', badge: 'bg-green-500/20 text-green-400' },
+  critical: { icon: <Flame className="w-4 h-4" />, color: 'text-red-600', bg: 'bg-red-500/10 border-red-500/25', badge: 'bg-red-500/15 text-red-700 border border-red-500/20' },
+  warning: { icon: <AlertTriangle className="w-4 h-4" />, color: 'text-amber-600', bg: 'bg-amber-500/10 border-amber-500/25', badge: 'bg-amber-500/15 text-amber-800 border border-amber-500/20' },
+  info: { icon: <Info className="w-4 h-4" />, color: 'text-primary', bg: 'bg-primary/10 border-primary/20', badge: 'bg-primary/12 text-primary border border-primary/20' },
+  positive: { icon: <CheckCircle2 className="w-4 h-4" />, color: 'text-emerald-600', bg: 'bg-emerald-500/10 border-emerald-500/25', badge: 'bg-emerald-500/15 text-emerald-800 border border-emerald-500/20' },
 }
 
 export function SmartAlerts() {
-  const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info' | 'positive'>('all')
+  const [filter, setFilter] = useState<'all' | Severity>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const filtered = filter === 'all' ? alerts : alerts.filter(a => a.severity === filter)
+  useEffect(() => {
+    fetchNotifications()
+      .then(setNotifications)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const alertItems = notifications.map(n => ({
+    id: n.id,
+    payer: extractPayer(n),
+    drug: extractDrug(n),
+    change: extractChangeSummary(n),
+    details: n.message,
+    date: formatDate(n.created_at),
+    severity: classifySeverity(n),
+    trend: classifySeverity(n) === 'critical' || classifySeverity(n) === 'warning' ? 'down' as const : classifySeverity(n) === 'positive' ? 'up' as const : undefined,
+  }))
+
+  const filtered = filter === 'all' ? alertItems : alertItems.filter(a => a.severity === filter)
 
   const stats = {
-    critical: alerts.filter(a => a.severity === 'critical').length,
-    warning: alerts.filter(a => a.severity === 'warning').length,
-    positive: alerts.filter(a => a.severity === 'positive').length,
-    total: alerts.length,
+    critical: alertItems.filter(a => a.severity === 'critical').length,
+    warning: alertItems.filter(a => a.severity === 'warning').length,
+    positive: alertItems.filter(a => a.severity === 'positive').length,
+    total: alertItems.length,
   }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center">
-          <Bell className="w-5 h-5 text-red-400" />
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/15 to-orange-500/10 ring-1 ring-border flex items-center justify-center">
+          <Bell className="w-5 h-5 text-red-600" />
         </div>
         <div>
           <h2 className="text-xl font-bold">Smart Alerts</h2>
@@ -138,7 +119,7 @@ export function SmartAlerts() {
           whileHover={{ y: -2 }}
           onClick={() => setFilter('critical')}
         >
-          <div className="text-2xl font-bold text-red-400">{stats.critical}</div>
+          <div className="text-2xl font-bold text-red-600 tabular-nums">{stats.critical}</div>
           <div className="text-[10px] text-muted-foreground uppercase mt-1">Critical</div>
         </motion.div>
         <motion.div
@@ -146,7 +127,7 @@ export function SmartAlerts() {
           whileHover={{ y: -2 }}
           onClick={() => setFilter('warning')}
         >
-          <div className="text-2xl font-bold text-yellow-400">{stats.warning}</div>
+          <div className="text-2xl font-bold text-amber-600 tabular-nums">{stats.warning}</div>
           <div className="text-[10px] text-muted-foreground uppercase mt-1">Warnings</div>
         </motion.div>
         <motion.div
@@ -154,7 +135,7 @@ export function SmartAlerts() {
           whileHover={{ y: -2 }}
           onClick={() => setFilter('positive')}
         >
-          <div className="text-2xl font-bold text-green-400">{stats.positive}</div>
+          <div className="text-2xl font-bold text-emerald-600 tabular-nums">{stats.positive}</div>
           <div className="text-[10px] text-muted-foreground uppercase mt-1">Positive</div>
         </motion.div>
       </div>
@@ -179,6 +160,18 @@ export function SmartAlerts() {
 
       {/* Alert feed */}
       <div className="space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">Loading alerts...</span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <Bell className="w-8 h-8 mb-2 opacity-30" />
+            <p className="text-sm">No alerts found</p>
+            <p className="text-xs mt-1 opacity-60">Policy change alerts will appear here after scraping</p>
+          </div>
+        ) : (
         <AnimatePresence mode="popLayout">
           {filtered.map((alert, i) => {
             const config = severityConfig[alert.severity]
@@ -209,7 +202,7 @@ export function SmartAlerts() {
                         {alert.trend && (
                           <span className={cn(
                             'flex items-center gap-0.5 text-[10px]',
-                            alert.trend === 'up' ? 'text-green-400' : alert.trend === 'down' ? 'text-red-400' : 'text-muted-foreground'
+                            alert.trend === 'up' ? 'text-emerald-600' : alert.trend === 'down' ? 'text-red-600' : 'text-muted-foreground'
                           )}>
                             {alert.trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                             Access
@@ -218,7 +211,7 @@ export function SmartAlerts() {
                       </div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs px-2 py-0.5 rounded-md bg-secondary text-muted-foreground">{alert.payer}</span>
-                        <span className="text-xs px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400">{alert.drug}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-md bg-primary/10 text-primary font-medium">{alert.drug}</span>
                       </div>
                       <p className="text-sm font-medium text-foreground">{alert.change}</p>
                     </div>
@@ -247,6 +240,7 @@ export function SmartAlerts() {
             )
           })}
         </AnimatePresence>
+        )}
       </div>
     </div>
   )

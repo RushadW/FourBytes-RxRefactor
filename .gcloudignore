@@ -1,0 +1,27 @@
+# Dependencies & build output
+node_modules/
+.next/
+out/
+
+# Backend (not needed for frontend deploy)
+backend/
+!backend/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+
+# OS
+.DS_Store
+
+# Misc
+*.log
+frontend_html/
