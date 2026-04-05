@@ -100,11 +100,11 @@ export function KnowledgeGraph() {
     
     nodesRef.current = initialNodes.map((n, i) => {
       const angle = (i / initialNodes.length) * Math.PI * 2
-      const typeRadius = n.type === 'drug' ? 80 : n.type === 'payer' ? 160 : n.type === 'criteria' ? 120 : 200
+      const typeRadius = n.type === 'drug' ? 120 : n.type === 'payer' ? 240 : n.type === 'criteria' ? 180 : 280
       return {
         ...n,
-        x: cx + Math.cos(angle) * typeRadius + (Math.random() - 0.5) * 60,
-        y: cy + Math.sin(angle) * typeRadius + (Math.random() - 0.5) * 60,
+        x: cx + Math.cos(angle) * typeRadius + (Math.random() - 0.5) * 80,
+        y: cy + Math.sin(angle) * typeRadius + (Math.random() - 0.5) * 80,
         vx: 0,
         vy: 0,
       }
@@ -152,7 +152,7 @@ export function KnowledgeGraph() {
           const dx = node.x - other.x
           const dy = node.y - other.y
           const dist = Math.sqrt(dx * dx + dy * dy) || 1
-          const force = 800 / (dist * dist)
+          const force = 2400 / (dist * dist)
           node.vx += (dx / dist) * force
           node.vy += (dy / dist) * force
         }
@@ -199,14 +199,47 @@ export function KnowledgeGraph() {
         const isHighlighted = hoveredNode === edge.source || hoveredNode === edge.target
         const isConnectedToSelected = selectedNode && (edge.source === selectedNode.id || edge.target === selectedNode.id)
 
-        ctx.beginPath()
-        ctx.moveTo(source.x, source.y)
-        ctx.lineTo(target.x, target.y)
-        ctx.strokeStyle = isHighlighted || isConnectedToSelected
+        const dx = target.x - source.x
+        const dy = target.y - source.y
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const ux = dx / dist
+        const uy = dy / dist
+
+        // Shorten line to stop at node edge
+        const startX = source.x + ux * source.radius
+        const startY = source.y + uy * source.radius
+        const endX = target.x - ux * target.radius
+        const endY = target.y - uy * target.radius
+
+        const lineColor = isHighlighted || isConnectedToSelected
           ? edge.color
           : hoveredNode || selectedNode ? 'rgba(15, 23, 42, 0.06)' : 'rgba(15, 23, 42, 0.12)'
-        ctx.lineWidth = isHighlighted || isConnectedToSelected ? 2 : 1
+        const lineWidth = isHighlighted || isConnectedToSelected ? 2 : 1
+
+        // Draw line
+        ctx.beginPath()
+        ctx.moveTo(startX, startY)
+        ctx.lineTo(endX, endY)
+        ctx.strokeStyle = lineColor
+        ctx.lineWidth = lineWidth
         ctx.stroke()
+
+        // Draw arrowhead
+        const arrowSize = isHighlighted || isConnectedToSelected ? 10 : 7
+        const angle = Math.atan2(endY - startY, endX - startX)
+        ctx.beginPath()
+        ctx.moveTo(endX, endY)
+        ctx.lineTo(
+          endX - arrowSize * Math.cos(angle - Math.PI / 7),
+          endY - arrowSize * Math.sin(angle - Math.PI / 7)
+        )
+        ctx.lineTo(
+          endX - arrowSize * Math.cos(angle + Math.PI / 7),
+          endY - arrowSize * Math.sin(angle + Math.PI / 7)
+        )
+        ctx.closePath()
+        ctx.fillStyle = lineColor
+        ctx.fill()
 
         // Edge label
         if ((isHighlighted || isConnectedToSelected) && edge.label) {
@@ -368,7 +401,7 @@ export function KnowledgeGraph() {
       </div>
 
       {/* Canvas */}
-      <div ref={containerRef} className="glass-card rounded-xl overflow-hidden relative" style={{ height: 450 }}>
+      <div ref={containerRef} className="glass-card rounded-xl overflow-hidden relative" style={{ height: 550 }}>
         <canvas
           ref={canvasRef}
           style={{ width: dimensions.width, height: dimensions.height, cursor: hoveredNode ? 'pointer' : 'default' }}

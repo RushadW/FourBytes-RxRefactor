@@ -8,7 +8,6 @@ import {
   BookOpen, Network, Radio,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SMART_ALERTS_FEED_COUNT } from '@/components/anton/smart-alerts'
 
 const ALERTS_PAGE_SEEN_SESSION_KEY = 'antonrx-alerts-page-seen'
 
@@ -44,6 +43,7 @@ export function AppSidebar() {
   const pathname = usePathname()
   const [apiConnected, setApiConnected] = useState(false)
   const [planCount, setPlanCount] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(0)
   /** `null` until we read sessionStorage (avoids hydration flash). */
   const [alertsPageSeenThisSession, setAlertsPageSeenThisSession] = useState<boolean | null>(null)
 
@@ -54,6 +54,12 @@ export function AppSidebar() {
         setApiConnected(true)
         setPlanCount(data.payers?.length || 0)
       })
+      .catch(() => {})
+
+    // Fetch unread notification count
+    fetch(`${API_BASE}/notifications?unread_only=true`)
+      .then(r => r.json())
+      .then((data: unknown[]) => setUnreadCount(data.length))
       .catch(() => {})
   }, [])
 
@@ -66,10 +72,13 @@ export function AppSidebar() {
     if (pathname !== '/alerts' || typeof window === 'undefined') return
     sessionStorage.setItem(ALERTS_PAGE_SEEN_SESSION_KEY, '1')
     setAlertsPageSeenThisSession(true)
+    // Mark all notifications as read when visiting alerts page
+    fetch(`${API_BASE}/notifications/read-all`, { method: 'POST' })
+      .then(() => setUnreadCount(0))
+      .catch(() => {})
   }, [pathname])
 
-  const showAlertsNavBadge =
-    alertsPageSeenThisSession === false && SMART_ALERTS_FEED_COUNT > 0
+  const showAlertsNavBadge = unreadCount > 0 && alertsPageSeenThisSession === false
 
   const isActive = (item: (typeof navSections)[0]['items'][0]) => {
     if ('matchPaths' in item && item.matchPaths) {
@@ -130,9 +139,9 @@ export function AppSidebar() {
                     {isAlerts && showAlertsNavBadge && (
                       <span
                         className="shrink-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold leading-none text-white ring-2 ring-sidebar"
-                        aria-label={`${SMART_ALERTS_FEED_COUNT} items on Alerts`}
+                        aria-label={`${unreadCount} unread alerts`}
                       >
-                        {SMART_ALERTS_FEED_COUNT > 99 ? '99+' : SMART_ALERTS_FEED_COUNT}
+                        {unreadCount > 99 ? '99+' : unreadCount}
                       </span>
                     )}
                   </Link>
