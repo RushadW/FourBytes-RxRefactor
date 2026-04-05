@@ -9,7 +9,7 @@ REM Wait a moment for backend to start
 timeout /t 3 /nobreak > nul
 
 REM Start Streamlit frontend in a new window
-start "Streamlit Frontend" cmd /k "streamlit run frontend/app.py --server.port 8501"
+start "Streamlit Frontend" cmd /k "streamlit run frontend/app.py --server.port 8501 --server.headless true"
 
 echo.
 echo Backend:  http://localhost:8000
