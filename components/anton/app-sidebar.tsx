@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const ALERTS_PAGE_SEEN_SESSION_KEY = 'antonrx-alerts-page-seen'
+const ALERTS_PAGE_SEEN_SESSION_KEY = 'rxrefactor-alerts-page-seen'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'
 
@@ -26,7 +26,7 @@ const navSections = [
   },
 ]
 
-function AntonLogo({ className }: { className?: string }) {
+function RxLogo({ className }: { className?: string }) {
   return (
     <div
       className={cn(
@@ -95,10 +95,10 @@ export function AppSidebar() {
 
       <div className="px-3 pt-5 pb-3 relative">
         <Link href="/" className="flex items-center gap-2.5 group min-w-0">
-          <AntonLogo className="w-8 h-8 flex-shrink-0 transition-transform duration-200 group-hover:scale-[1.03]" />
+          <RxLogo className="w-8 h-8 flex-shrink-0 transition-transform duration-200 group-hover:scale-[1.03]" />
           <div className="min-w-0">
             <h1 className="text-[13px] font-bold text-sidebar-foreground tracking-tight leading-none">
-              AntonRx
+              RxRefactor
             </h1>
             <p className="text-[10px] text-sidebar-foreground/45 mt-0.5 font-medium leading-tight">
               Drug policy intelligence

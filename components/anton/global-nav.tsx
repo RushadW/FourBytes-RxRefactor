@@ -46,7 +46,7 @@ export function GlobalNav() {
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center group-hover:scale-105 transition-transform shadow-sm">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span className="text-lg font-bold text-gradient">Anton Rx</span>
+            <span className="text-lg font-bold text-gradient">RxRefactor</span>
           </Link>
           
           {/* Nav items */}

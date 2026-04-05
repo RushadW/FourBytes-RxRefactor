@@ -30,7 +30,7 @@ export function ActionBar({ summary, query }: ActionBarProps) {
   const [copied, setCopied] = useState(false)
 
   const handleCopyText = () => {
-    navigator.clipboard.writeText(`Anton Rx Analysis: ${summary}\n\nQuery: ${query}`)
+    navigator.clipboard.writeText(`RxRefactor Analysis: ${summary}\n\nQuery: ${query}`)
     setCopied(true)
     toast.success('Copied to clipboard')
     setTimeout(() => setCopied(false), 2000)

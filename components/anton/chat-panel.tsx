@@ -94,7 +94,7 @@ function generateChatResponse(query: string): string {
   }
   
   if (q.includes('help') || q.includes('what can')) {
-    return `I'm **Anton Rx AI**, your medical policy intelligence assistant. Here's what I can help with:\n\n🔍 **Compare drugs across payers** — "Compare Rituximab across all payers"\n📋 **Check coverage** — "Does Cigna cover Humira?"\n⚡ **Prior auth info** — "What are the PA requirements for biologics?"\n📊 **Step therapy** — "Which payers require step therapy?"\n🔄 **Policy changes** — "What changed in policies this quarter?"\n\nJust ask in natural language, or use the voice button! 🎤`
+    return `I'm **RxRefactor AI**, your medical policy intelligence assistant. Here's what I can help with:\n\n🔍 **Compare drugs across payers** — "Compare Rituximab across all payers"\n📋 **Check coverage** — "Does Cigna cover Humira?"\n⚡ **Prior auth info** — "What are the PA requirements for biologics?"\n📊 **Step therapy** — "Which payers require step therapy?"\n🔄 **Policy changes** — "What changed in policies this quarter?"\n\nJust ask in natural language, or use the voice button! 🎤`
   }
   
   return `Based on your query about "${parsed.drug !== 'Unknown drug' ? parsed.drug : 'drug policies'}":\n\nI found **${payerPolicies.length} policies** across **3 payers** (Cigna, UnitedHealthcare, BCBS) covering **${drugs.length} drugs** in our database.\n\n**Quick Stats:**\n- ${payerPolicies.filter(p => p.priorAuth).length}/${payerPolicies.length} policies require prior authorization\n- ${payerPolicies.filter(p => p.stepTherapy).length}/${payerPolicies.length} have step therapy requirements\n\nTry asking something more specific like:\n- "Compare Rituximab across payers"\n- "What step therapy does Cigna require?"\n- "Show me recent policy changes"`
@@ -106,7 +106,7 @@ export function ChatPanel() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Hi! I\'m **Anton Rx AI**. Ask me anything about drug coverage policies. Try "Compare Rituximab across payers" or use the mic to speak! 🎤',
+      content: 'Hi! I\'m **RxRefactor AI**. Ask me anything about drug coverage policies. Try "Compare Rituximab across payers" or use the mic to speak! 🎤',
       timestamp: new Date(),
     },
   ])
@@ -222,7 +222,7 @@ export function ChatPanel() {
                   <Sparkles className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-sm">Anton Rx AI</h3>
+                  <h3 className="font-semibold text-sm">RxRefactor AI</h3>
                   <p className="text-xs text-green-600 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
                     Online

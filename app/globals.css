@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Anton Rx — clinical premium: cool neutrals + indigo–violet–teal */
+  /* RxRefactor — clinical premium: cool neutrals + indigo–violet–teal */
   --background: #f3f5fb;
   --foreground: #0f172a;
   --card: #ffffff;
@@ -131,7 +131,7 @@
   }
 }
 
-/* Anton Rx Soft Light Styles */
+/* RxRefactor Soft Light Styles */
 @layer utilities {
   .glass-card {
     background: rgba(255, 255, 255, 0.82);

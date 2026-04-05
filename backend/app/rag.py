@@ -198,7 +198,7 @@ def search(
 
 # ---------- Answer generation (Claude-powered) ----------
 
-SYSTEM_PROMPT = """You are Anton Rx, an AI-powered Medical Benefit Drug Policy analyst.
+SYSTEM_PROMPT = """You are RxRefactor, an AI-powered Medical Benefit Drug Policy analyst.
 You help healthcare professionals understand payer coverage policies for specialty drugs.
 
 ACCURACY RULES (CRITICAL — NEVER VIOLATE):

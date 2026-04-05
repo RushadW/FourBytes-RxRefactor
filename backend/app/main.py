@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Anton Rx API",
+    title="RxRefactor API",
     description="Medical Benefit Drug Policy Tracker — backend API",
     version="1.0.0",
     lifespan=lifespan,

@@ -1,8 +1,8 @@
-# AntonRx — AI-Powered Medical Benefit Drug Policy Tracker
+# RxRefactor — AI-Powered Medical Benefit Drug Policy Tracker
 
 > **Innovation Hacks 2.0 · April 3–5, 2026**
 
-AntonRx is a full-stack AI application that tracks, compares, and analyzes **medical benefit drug policies** across multiple payers. It combines a structured database of **55 policies** across **15 specialty drugs** and **5 payers** with a **RAG-powered Claude AI assistant**, letting healthcare analysts ask natural-language questions and instantly receive accurate, sourced answers — with voice input/output, autocomplete, and rich markdown rendering.
+RxRefactor is a full-stack AI application that tracks, compares, and analyzes **medical benefit drug policies** across multiple payers. It combines a structured database of **55 policies** across **15 specialty drugs** and **5 payers** with a **RAG-powered Claude AI assistant**, letting healthcare analysts ask natural-language questions and instantly receive accurate, sourced answers — with voice input/output, autocomplete, and rich markdown rendering.
 
 **Live Demo:** [https://anton-rx-frontend-770871054693.us-central1.run.app](https://anton-rx-frontend-770871054693.us-central1.run.app)
 
@@ -266,7 +266,7 @@ In a separate terminal:
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to start using AntonRx.
+Open [http://localhost:3000](http://localhost:3000) to start using RxRefactor.
 
 ---
 
@@ -356,7 +356,7 @@ For the frontend, the API URL is configured in `next.config.mjs` and the root `D
 
 ## Example Queries
 
-AntonRx understands natural-language questions. Here are some examples:
+RxRefactor understands natural-language questions. Here are some examples:
 
 ### Drug-Specific
 | Query | What You Get |
@@ -467,13 +467,13 @@ gcloud run deploy anton-rx-frontend \
 ```bash
 # Backend
 cd backend
-docker build -t antonrx-api .
-docker run -p 8080:8080 -e ANTHROPIC_API_KEY=sk-ant-... antonrx-api
+docker build -t rxrefactor-api .
+docker run -p 8080:8080 -e ANTHROPIC_API_KEY=sk-ant-... rxrefactor-api
 
 # Frontend
 cd ..
-docker build -t antonrx-frontend .
-docker run -p 3000:3000 antonrx-frontend
+docker build -t rxrefactor-frontend .
+docker run -p 3000:3000 rxrefactor-frontend
 ```
 
 ### Production URLs
