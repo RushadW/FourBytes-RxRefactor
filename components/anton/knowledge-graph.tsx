@@ -1,0 +1,433 @@
+'use client'
+
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Network, ZoomIn, ZoomOut, RotateCcw, Info } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
+interface GraphNode {
+  id: string
+  label: string
+  type: 'drug' | 'payer' | 'criteria' | 'indication'
+  x: number
+  y: number
+  vx: number
+  vy: number
+  radius: number
+}
+
+interface GraphEdge {
+  source: string
+  target: string
+  type: 'covers' | 'requires' | 'treats'
+  label?: string
+  color: string
+}
+
+const initialNodes: Omit<GraphNode, 'x' | 'y' | 'vx' | 'vy'>[] = [
+  // Drugs
+  { id: 'rituximab', label: 'Rituximab', type: 'drug', radius: 28 },
+  { id: 'humira', label: 'Humira', type: 'drug', radius: 28 },
+  { id: 'bevacizumab', label: 'Bevacizumab', type: 'drug', radius: 28 },
+  // Payers
+  { id: 'cigna', label: 'Cigna', type: 'payer', radius: 24 },
+  { id: 'uhc', label: 'UHC', type: 'payer', radius: 24 },
+  { id: 'bcbs', label: 'BCBS', type: 'payer', radius: 24 },
+  // Criteria
+  { id: 'pa', label: 'Prior Auth', type: 'criteria', radius: 20 },
+  { id: 'step', label: 'Step Therapy', type: 'criteria', radius: 20 },
+  { id: 'home', label: 'Home Infusion', type: 'criteria', radius: 20 },
+  // Indications
+  { id: 'oncology', label: 'Oncology', type: 'indication', radius: 18 },
+  { id: 'autoimmune', label: 'Autoimmune', type: 'indication', radius: 18 },
+  { id: 'rheum', label: 'Rheumatology', type: 'indication', radius: 18 },
+]
+
+const edges: GraphEdge[] = [
+  // Cigna → drugs
+  { source: 'cigna', target: 'rituximab', type: 'covers', label: 'PA+ST', color: '#3b82f6' },
+  { source: 'cigna', target: 'humira', type: 'covers', label: 'PA+ST', color: '#3b82f6' },
+  // UHC → drugs
+  { source: 'uhc', target: 'rituximab', type: 'covers', label: 'PA only', color: '#22c55e' },
+  { source: 'uhc', target: 'humira', type: 'covers', label: 'PA only', color: '#22c55e' },
+  // BCBS → drugs
+  { source: 'bcbs', target: 'rituximab', type: 'covers', label: 'PA+ST', color: '#8b5cf6' },
+  { source: 'bcbs', target: 'humira', type: 'covers', label: 'PA+ST', color: '#8b5cf6' },
+  // Drugs → criteria
+  { source: 'rituximab', target: 'pa', type: 'requires', color: '#f59e0b' },
+  { source: 'rituximab', target: 'step', type: 'requires', color: '#f59e0b' },
+  { source: 'humira', target: 'pa', type: 'requires', color: '#f59e0b' },
+  { source: 'humira', target: 'step', type: 'requires', color: '#f59e0b' },
+  { source: 'uhc', target: 'home', type: 'covers', color: '#22c55e' },
+  // Drugs → indications
+  { source: 'rituximab', target: 'oncology', type: 'treats', color: '#ec4899' },
+  { source: 'rituximab', target: 'autoimmune', type: 'treats', color: '#ec4899' },
+  { source: 'humira', target: 'autoimmune', type: 'treats', color: '#ec4899' },
+  { source: 'humira', target: 'rheum', type: 'treats', color: '#ec4899' },
+  { source: 'bevacizumab', target: 'oncology', type: 'treats', color: '#ec4899' },
+]
+
+const typeColors: Record<string, string> = {
+  drug: '#3b82f6',
+  payer: '#22c55e',
+  criteria: '#f59e0b',
+  indication: '#ec4899',
+}
+
+const typeLabels: Record<string, string> = {
+  drug: 'Drugs',
+  payer: 'Payers',
+  criteria: 'Requirements',
+  indication: 'Indications',
+}
+
+export function KnowledgeGraph() {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const nodesRef = useRef<GraphNode[]>([])
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null)
+  const [zoom, setZoom] = useState(1)
+  const [dimensions, setDimensions] = useState({ width: 800, height: 500 })
+  const animFrameRef = useRef<number>(0)
+  const mouseRef = useRef({ x: 0, y: 0, isDragging: false, dragNode: null as GraphNode | null })
+
+  // Initialize nodes with positions
+  useEffect(() => {
+    const cx = dimensions.width / 2
+    const cy = dimensions.height / 2
+    
+    nodesRef.current = initialNodes.map((n, i) => {
+      const angle = (i / initialNodes.length) * Math.PI * 2
+      const typeRadius = n.type === 'drug' ? 80 : n.type === 'payer' ? 160 : n.type === 'criteria' ? 120 : 200
+      return {
+        ...n,
+        x: cx + Math.cos(angle) * typeRadius + (Math.random() - 0.5) * 60,
+        y: cy + Math.sin(angle) * typeRadius + (Math.random() - 0.5) * 60,
+        vx: 0,
+        vy: 0,
+      }
+    })
+  }, [dimensions])
+
+  // Resize observer
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const ro = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect
+      setDimensions({ width, height: Math.max(height, 400) })
+    })
+    ro.observe(container)
+    return () => ro.disconnect()
+  }, [])
+
+  // Force simulation + rendering
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = dimensions.width * dpr
+    canvas.height = dimensions.height * dpr
+    ctx.scale(dpr, dpr)
+
+    const tick = () => {
+      const nodes = nodesRef.current
+      const cx = dimensions.width / 2
+      const cy = dimensions.height / 2
+
+      // Force simulation
+      for (const node of nodes) {
+        // Center gravity
+        node.vx += (cx - node.x) * 0.001
+        node.vy += (cy - node.y) * 0.001
+
+        // Repulsion between nodes
+        for (const other of nodes) {
+          if (node.id === other.id) continue
+          const dx = node.x - other.x
+          const dy = node.y - other.y
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1
+          const force = 800 / (dist * dist)
+          node.vx += (dx / dist) * force
+          node.vy += (dy / dist) * force
+        }
+
+        // Edge attraction
+        for (const edge of edges) {
+          if (edge.source === node.id || edge.target === node.id) {
+            const otherId = edge.source === node.id ? edge.target : edge.source
+            const other = nodes.find(n => n.id === otherId)
+            if (!other) continue
+            const dx = other.x - node.x
+            const dy = other.y - node.y
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1
+            node.vx += (dx / dist) * 0.3
+            node.vy += (dy / dist) * 0.3
+          }
+        }
+
+        // Damping
+        node.vx *= 0.9
+        node.vy *= 0.9
+
+        // Skip position update for dragged node
+        if (mouseRef.current.dragNode?.id !== node.id) {
+          node.x += node.vx
+          node.y += node.vy
+        }
+
+        // Bounds
+        node.x = Math.max(node.radius, Math.min(dimensions.width - node.radius, node.x))
+        node.y = Math.max(node.radius, Math.min(dimensions.height - node.radius, node.y))
+      }
+
+      // Clear
+      ctx.clearRect(0, 0, dimensions.width, dimensions.height)
+      ctx.save()
+
+      // Draw edges
+      for (const edge of edges) {
+        const source = nodes.find(n => n.id === edge.source)
+        const target = nodes.find(n => n.id === edge.target)
+        if (!source || !target) continue
+
+        const isHighlighted = hoveredNode === edge.source || hoveredNode === edge.target
+        const isConnectedToSelected = selectedNode && (edge.source === selectedNode.id || edge.target === selectedNode.id)
+
+        ctx.beginPath()
+        ctx.moveTo(source.x, source.y)
+        ctx.lineTo(target.x, target.y)
+        ctx.strokeStyle = isHighlighted || isConnectedToSelected
+          ? edge.color
+          : hoveredNode || selectedNode ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.08)'
+        ctx.lineWidth = isHighlighted || isConnectedToSelected ? 2 : 1
+        ctx.stroke()
+
+        // Edge label
+        if ((isHighlighted || isConnectedToSelected) && edge.label) {
+          const mx = (source.x + target.x) / 2
+          const my = (source.y + target.y) / 2
+          ctx.font = '10px Geist, sans-serif'
+          ctx.fillStyle = 'rgba(255,255,255,0.6)'
+          ctx.textAlign = 'center'
+          ctx.fillText(edge.label, mx, my - 5)
+        }
+      }
+
+      // Draw nodes
+      for (const node of nodes) {
+        const isHovered = hoveredNode === node.id
+        const isSelected = selectedNode?.id === node.id
+        const isConnected = hoveredNode
+          ? edges.some(e => (e.source === hoveredNode && e.target === node.id) || (e.target === hoveredNode && e.source === node.id))
+          : selectedNode
+          ? edges.some(e => (e.source === selectedNode.id && e.target === node.id) || (e.target === selectedNode.id && e.source === node.id))
+          : false
+        const isDimmed = (hoveredNode || selectedNode) && !isHovered && !isSelected && !isConnected
+
+        const color = typeColors[node.type]
+        const r = node.radius * (isHovered ? 1.2 : 1)
+
+        // Glow
+        if (isHovered || isSelected) {
+          const gradient = ctx.createRadialGradient(node.x, node.y, r, node.x, node.y, r * 2.5)
+          gradient.addColorStop(0, color + '30')
+          gradient.addColorStop(1, 'transparent')
+          ctx.fillStyle = gradient
+          ctx.beginPath()
+          ctx.arc(node.x, node.y, r * 2.5, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        // Node circle
+        ctx.beginPath()
+        ctx.arc(node.x, node.y, r, 0, Math.PI * 2)
+        ctx.fillStyle = isDimmed ? color + '15' : color + '30'
+        ctx.fill()
+        ctx.strokeStyle = isDimmed ? color + '20' : color + '80'
+        ctx.lineWidth = isHovered || isSelected ? 2.5 : 1.5
+        ctx.stroke()
+
+        // Label
+        ctx.font = `${isHovered ? 'bold ' : ''}11px Geist, sans-serif`
+        ctx.fillStyle = isDimmed ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.9)'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(node.label, node.x, node.y)
+      }
+
+      ctx.restore()
+      animFrameRef.current = requestAnimationFrame(tick)
+    }
+
+    tick()
+    return () => cancelAnimationFrame(animFrameRef.current)
+  }, [dimensions, hoveredNode, selectedNode])
+
+  // Mouse handlers
+  const getNodeAtPosition = useCallback((px: number, py: number): GraphNode | null => {
+    for (const node of nodesRef.current) {
+      const dx = px - node.x
+      const dy = py - node.y
+      if (dx * dx + dy * dy < node.radius * node.radius * 1.5) {
+        return node
+      }
+    }
+    return null
+  }, [])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    mouseRef.current.x = x
+    mouseRef.current.y = y
+
+    if (mouseRef.current.dragNode) {
+      mouseRef.current.dragNode.x = x
+      mouseRef.current.dragNode.y = y
+      return
+    }
+
+    const node = getNodeAtPosition(x, y)
+    setHoveredNode(node?.id || null)
+  }, [getNodeAtPosition])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const node = getNodeAtPosition(x, y)
+    if (node) {
+      mouseRef.current.dragNode = node
+      mouseRef.current.isDragging = true
+    }
+  }, [getNodeAtPosition])
+
+  const handleMouseUp = useCallback(() => {
+    if (mouseRef.current.dragNode && !mouseRef.current.isDragging) {
+      setSelectedNode(prev => prev?.id === mouseRef.current.dragNode?.id ? null : mouseRef.current.dragNode)
+    }
+    mouseRef.current.dragNode = null
+    mouseRef.current.isDragging = false
+  }, [])
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const node = getNodeAtPosition(x, y)
+    setSelectedNode(prev => prev?.id === node?.id ? null : node || null)
+  }, [getNodeAtPosition])
+
+  const connectedEdges = selectedNode
+    ? edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id)
+    : []
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center">
+            <Network className="w-5 h-5 text-cyan-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold">Knowledge Graph</h2>
+            <p className="text-sm text-muted-foreground">Interactive policy relationship map</p>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => { setSelectedNode(null); setHoveredNode(null) }}
+        >
+          <RotateCcw className="w-3 h-3 mr-2" /> Reset
+        </Button>
+      </div>
+
+      {/* Legend */}
+      <div className="flex gap-4 flex-wrap">
+        {Object.entries(typeLabels).map(([type, label]) => (
+          <div key={type} className="flex items-center gap-1.5">
+            <div
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: typeColors[type] + '80' }}
+            />
+            <span className="text-xs text-muted-foreground">{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Canvas */}
+      <div ref={containerRef} className="glass-card rounded-xl overflow-hidden relative" style={{ height: 450 }}>
+        <canvas
+          ref={canvasRef}
+          style={{ width: dimensions.width, height: dimensions.height, cursor: hoveredNode ? 'pointer' : 'default' }}
+          onMouseMove={handleMouseMove}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          onClick={handleClick}
+          onMouseLeave={() => { setHoveredNode(null); mouseRef.current.dragNode = null }}
+        />
+
+        {/* Node info panel */}
+        <AnimatePresence>
+          {selectedNode && (
+            <motion.div
+              className="absolute top-4 right-4 w-64 glass-card rounded-xl p-4 border border-border/50"
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 10 }}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <div
+                  className="w-6 h-6 rounded-md flex items-center justify-center"
+                  style={{ backgroundColor: typeColors[selectedNode.type] + '30' }}
+                >
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: typeColors[selectedNode.type] }} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{selectedNode.label}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase">{selectedNode.type}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  {connectedEdges.length} connection{connectedEdges.length !== 1 ? 's' : ''}
+                </p>
+                {connectedEdges.map((edge, i) => {
+                  const otherId = edge.source === selectedNode.id ? edge.target : edge.source
+                  const other = nodesRef.current.find(n => n.id === otherId)
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: edge.color }} />
+                      <span className="text-muted-foreground">{edge.type}:</span>
+                      <span className="text-foreground">{other?.label}</span>
+                      {edge.label && (
+                        <span className="text-[10px] text-muted-foreground/60">({edge.label})</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <p className="absolute bottom-3 left-3 text-[10px] text-muted-foreground/40">
+          Click nodes to inspect • Drag to rearrange
+        </p>
+      </div>
+    </div>
+  )
+}
