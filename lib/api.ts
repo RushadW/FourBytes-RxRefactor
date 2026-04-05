@@ -167,6 +167,13 @@ function generateSummary(drug: Drug, policies: PayerPolicy[]): string {
 
 // ---------- API calls ----------
 
+export async function fetchPoliciesByPayer(payerId: string): Promise<PayerPolicy[]> {
+  const res = await fetch(`${API_BASE}/policies?payer_id=${encodeURIComponent(payerId)}`)
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  const data: ApiPolicy[] = await res.json()
+  return data.map(toPayerPolicy)
+}
+
 export async function fetchComparison(drugId: string, startTime: number): Promise<ComparisonResult> {
   const res = await fetch(`${API_BASE}/comparison/${drugId}`)
   if (!res.ok) throw new Error(`API error: ${res.status}`)
@@ -217,9 +224,9 @@ const DRUG_ALIASES: Record<string, string> = {
 const PAYER_ALIASES: Record<string, string> = {
   cigna: 'cigna',
   uhc: 'uhc', united: 'uhc', unitedhealthcare: 'uhc', 'united healthcare': 'uhc',
-  bcbs: 'bcbs_nc', 'blue cross': 'bcbs_nc', 'blue shield': 'bcbs_nc',
+  bcbs: 'bcbs', 'blue cross': 'bcbs', 'blue shield': 'bcbs',
   upmc: 'upmc',
-  'priority health': 'priority_health', priorityhealth: 'priority_health',
+  'priority health': 'priority_health', priorityhealth: 'priority_health', priority: 'priority_health',
   emblem: 'emblemhealth', emblemhealth: 'emblemhealth',
   'florida blue': 'florida_blue',
 }

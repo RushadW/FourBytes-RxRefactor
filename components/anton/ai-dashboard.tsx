@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { SpeakButton, VoiceOrb } from './voice-orb'
 import { parseQuery, getPoliciesForDrug, getDrugById, drugs, payerPolicies } from '@/lib/mock-data'
-import { fetchComparison, askQuestion, fetchPolicyVersions, parseQueryFilters, fetchDrugs, type ApiAskResponse, type PolicyVersionRecord } from '@/lib/api'
+import { fetchComparison, askQuestion, fetchPolicyVersions, parseQueryFilters, fetchDrugs, fetchPoliciesByPayer, type ApiAskResponse, type PolicyVersionRecord } from '@/lib/api'
 import type { PayerPolicy, Drug, Insight } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { PolicyMatrix } from './policy-matrix'
@@ -1515,6 +1515,26 @@ export function AIDashboard({ query }: AIDashboardProps) {
         setApiData({ drug: firstDrug, policies: payerPolicies, allPolicies: payerPolicies })
       }
       setLoading(false)
+    } else if (payerIds.length > 0) {
+      // Payer-wide query (no specific drug) — fetch all policies for all detected payers
+      Promise.all(payerIds.map(pid => fetchPoliciesByPayer(pid)))
+        .then(results => {
+          const allPolicies = results.flat()
+          if (allPolicies.length > 0) {
+            // Synthesize a placeholder "drug" from the first policy
+            const first = allPolicies[0]
+            const fakeDrug: Drug = {
+              id: first.drugId,
+              name: first.drugId,
+              genericName: '',
+              therapeuticArea: '',
+              drugCategory: '',
+            }
+            setApiData({ drug: fakeDrug, policies: allPolicies, allPolicies })
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false))
     } else {
       setLoading(false)
     }

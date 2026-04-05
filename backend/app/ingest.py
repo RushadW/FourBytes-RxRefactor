@@ -67,6 +67,11 @@ COMPARABLE_FIELDS = [
 ]
 
 
+def _is_empty(v):
+    """Treat None, [], '', and 'None' as equivalent empty values."""
+    return v is None or v == [] or v == "" or v == "None"
+
+
 def diff_policies(old: dict, new: dict) -> list[dict]:
     """Return list of {field, old_value, new_value, change_type}."""
     changes: list[dict] = []
@@ -75,16 +80,19 @@ def diff_policies(old: dict, new: dict) -> list[dict]:
         nv = new.get(f)
         if ov == nv:
             continue
-        if ov is None:
+        # Treat all empty-ish values as identical
+        if _is_empty(ov) and _is_empty(nv):
+            continue
+        if _is_empty(ov):
             ct = "added"
-        elif nv is None:
+        elif _is_empty(nv):
             ct = "removed"
         else:
             ct = "modified"
         changes.append({
             "field": f,
-            "old_value": str(ov) if ov is not None else None,
-            "new_value": str(nv) if nv is not None else None,
+            "old_value": str(ov) if not _is_empty(ov) else None,
+            "new_value": str(nv) if not _is_empty(nv) else None,
             "change_type": ct,
         })
     return changes
