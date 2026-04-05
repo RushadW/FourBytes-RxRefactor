@@ -394,6 +394,10 @@ def ask_question(req: AskRequest, db: Session = Depends(get_db)):
         drug_ids=drug_ids or None,
     )
 
+    # Filter out low-relevance chunks (prevents returning unrelated drug info)
+    MIN_RELEVANCE = 0.25
+    chunks = [c for c in chunks if c.get("score", 0) >= MIN_RELEVANCE]
+
     # Gather relevant structured policies + document URLs
     policy_ids = {c["metadata"].get("policy_id") for c in chunks if c.get("metadata")}
 

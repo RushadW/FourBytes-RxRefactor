@@ -9,7 +9,4 @@ python-multipart>=0.0.9
 pydantic-settings>=2.0.0
 lxml>=5.0.0
 fpdf2>=2.7.0
-
-# Optional GCP dependencies (uncomment when deploying to Cloud Run)
-# google-cloud-storage>=2.18.0
-# google-cloud-documentai>=2.29.0
+anthropic>=0.40.0

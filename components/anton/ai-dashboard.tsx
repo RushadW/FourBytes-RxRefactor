@@ -93,10 +93,11 @@ function generateDashboard(query: string, policies: PayerPolicy[], drug: Drug | 
 
 // ============= WIDGET COMPONENTS =============
 
-function QuickStatsWidget({ policies, drug }: { policies: PayerPolicy[]; drug: Drug | undefined }) {
+function QuickStatsWidget({ policies, drug, totalPolicies }: { policies: PayerPolicy[]; drug: Drug | undefined; totalPolicies?: number }) {
+  const uniquePayers = new Set(policies.map(p => p.payerId)).size
   const stats = [
-    { label: 'Policies Analyzed', value: policies.length * 4, icon: FileText, color: 'text-primary' },
-    { label: 'Payers Compared', value: policies.length, icon: Building2, color: 'text-primary' },
+    { label: 'Policies Analyzed', value: totalPolicies ?? policies.length, icon: FileText, color: 'text-primary' },
+    { label: 'Payers Compared', value: uniquePayers, icon: Building2, color: 'text-primary' },
     { label: 'Prior Auth Required', value: policies.filter(p => p.priorAuth).length, icon: Shield, color: 'text-amber-500' },
     { label: 'Step Therapy', value: policies.filter(p => p.stepTherapy).length, icon: Clock, color: 'text-primary' },
   ]
@@ -1245,35 +1246,33 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
   // Fetch from API on mount — structured data first, AI answer async
   useEffect(() => {
-    const q = query.toLowerCase()
     const { drugIds, payerIds } = parseQueryFilters(query)
-    let drugId = drugIds[0] || 'rituximab'
-    if (q.includes('humira')) drugId = 'humira'
-    if (q.includes('adalimumab')) drugId = 'adalimumab'
-    if (q.includes('bevacizumab')) drugId = 'bevacizumab'
-    if (q.includes('botulinum') || q.includes('botox')) drugId = 'botulinum'
-    if (q.includes('denosumab') || q.includes('prolia') || q.includes('xgeva')) drugId = 'denosumab'
-    if (q.includes('rituximab') || q.includes('rituxan')) drugId = 'rituximab'
+    const drugId = drugIds[0] || null
 
     // 1) Fetch structured comparison data FAST (SQL only, <50ms)
-    fetchComparison(drugId, Date.now())
-      .then(result => {
-        setApiData({ drug: result.drug, policies: result.policies, allPolicies: result.policies, rawPolicies: result.rawPolicies })
-      })
-      .catch(() => {
-        const drug = getDrugById(drugId)
-        const policies = getPoliciesForDrug(drugId)
-        if (drug) {
-          setApiData({ drug, policies, allPolicies: payerPolicies })
-        }
-      })
-      .finally(() => setLoading(false))
+    //    Only fetch if we detected a specific drug in the query
+    if (drugId) {
+      fetchComparison(drugId, Date.now())
+        .then(result => {
+          setApiData({ drug: result.drug, policies: result.policies, allPolicies: result.policies, rawPolicies: result.rawPolicies })
+        })
+        .catch(() => {
+          const drug = getDrugById(drugId)
+          const policies = getPoliciesForDrug(drugId)
+          if (drug) {
+            setApiData({ drug, policies, allPolicies: payerPolicies })
+          }
+        })
+        .finally(() => setLoading(false))
+    } else {
+      setLoading(false)
+    }
 
     // 2) Fetch AI answer in background (Claude call, may take a few seconds)
     //    Pass drug/payer filters so RAG searches the right vector chunks
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 25000)
-    askQuestion(query, drugIds.length ? drugIds : [drugId], payerIds.length ? payerIds : undefined)
+    askQuestion(query, drugIds.length ? drugIds : undefined, payerIds.length ? payerIds : undefined)
       .then(result => setAiResponse(result))
       .catch(() => {})
       .finally(() => { setAiLoading(false); clearTimeout(timeoutId) })
@@ -1283,9 +1282,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
   const dashboard = useMemo(() => {
     if (!apiData) {
-      const drug = getDrugById('rituximab')
-      const policies = getPoliciesForDrug('rituximab')
-      return generateDashboard(query, policies, drug, payerPolicies)
+      return { summary: '', widgets: [] }
     }
     return generateDashboard(query, apiData.policies, apiData.drug, apiData.allPolicies)
   }, [query, apiData])
@@ -1445,14 +1442,14 @@ export function AIDashboard({ query }: AIDashboardProps) {
             </div>
           </motion.div>
 
-          {/* Quick Stats */}
+          {/* Quick Stats — only show when we have relevant drug-specific data */}
           {apiData && apiData.policies.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <QuickStatsWidget policies={apiData.policies} drug={apiData.drug} />
+              <QuickStatsWidget policies={apiData.policies} drug={apiData.drug} totalPolicies={aiResponse?.relevant_policies?.length ?? apiData.policies.length} />
             </motion.div>
           )}
 

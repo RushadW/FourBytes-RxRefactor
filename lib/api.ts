@@ -187,7 +187,7 @@ export async function fetchComparison(drugId: string, startTime: number): Promis
     lastUpdated: new Date().toISOString(),
     confidence: 'high',
     stats: {
-      policiesAnalyzed: policies.length * 4,
+      policiesAnalyzed: policies.length,
       processingTimeMs: Date.now() - startTime,
       startTime,
     },
