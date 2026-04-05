@@ -43,12 +43,33 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
       setIsSupported(!!SpeechRecognition)
       synthRef.current = window.speechSynthesis
+      // Pre-load voices (they load async on some browsers)
+      synthRef.current.getVoices()
+      synthRef.current.onvoiceschanged = () => { synthRef.current?.getVoices() }
     }
+
+    // Stop audio on page navigation
+    const stopAll = () => {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
+      synthRef.current?.cancel()
+      setIsSpeaking(false)
+    }
+    window.addEventListener('beforeunload', stopAll)
+    window.addEventListener('pagehide', stopAll)
+
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop())
       }
+      // Stop any playing TTS audio on unmount / page change
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+      synthRef.current?.cancel()
+      window.removeEventListener('beforeunload', stopAll)
+      window.removeEventListener('pagehide', stopAll)
     }
   }, [])
 
@@ -151,29 +172,71 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     }
   }, [isListening, startListening, stopListening])
 
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  const API_BASE = typeof window !== 'undefined'
+    ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api')
+    : ''
+
   const speak = useCallback((text: string) => {
-    if (!synthRef.current) return
-    synthRef.current.cancel()
+    // Stop any current playback
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+    synthRef.current?.cancel()
     
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 1.0
-    utterance.pitch = 1.0
-    utterance.volume = 1.0
-    utterance.lang = lang
-    
-    // Try to use a natural voice
-    const voices = synthRef.current.getVoices()
-    const preferred = voices.find(v => v.name.includes('Samantha') || v.name.includes('Google') || v.name.includes('Natural'))
-    if (preferred) utterance.voice = preferred
-    
-    utterance.onstart = () => setIsSpeaking(true)
-    utterance.onend = () => setIsSpeaking(false)
-    utterance.onerror = () => setIsSpeaking(false)
-    
-    synthRef.current.speak(utterance)
-  }, [lang])
+    setIsSpeaking(true)
+
+    // Use neural TTS API (Microsoft Aria voice via edge-tts)
+    fetch(`${API_BASE}/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice: 'en-US-AriaNeural' }),
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('TTS API failed')
+        return res.blob()
+      })
+      .then(blob => {
+        const url = URL.createObjectURL(blob)
+        const audio = new Audio(url)
+        audioRef.current = audio
+        audio.onended = () => {
+          setIsSpeaking(false)
+          URL.revokeObjectURL(url)
+          audioRef.current = null
+        }
+        audio.onerror = () => {
+          setIsSpeaking(false)
+          URL.revokeObjectURL(url)
+          audioRef.current = null
+        }
+        audio.play()
+      })
+      .catch(() => {
+        // Fallback to browser TTS if API fails
+        setIsSpeaking(false)
+        if (synthRef.current) {
+          const utterance = new SpeechSynthesisUtterance(text)
+          utterance.rate = 0.92
+          utterance.lang = 'en-US'
+          const voices = synthRef.current.getVoices()
+          const voice = voices.find(v => v.name.includes('Samantha')) || voices.find(v => v.lang.startsWith('en'))
+          if (voice) utterance.voice = voice
+          utterance.onstart = () => setIsSpeaking(true)
+          utterance.onend = () => setIsSpeaking(false)
+          utterance.onerror = () => setIsSpeaking(false)
+          synthRef.current.speak(utterance)
+        }
+      })
+  }, [API_BASE])
 
   const stopSpeaking = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
     synthRef.current?.cancel()
     setIsSpeaking(false)
   }, [])

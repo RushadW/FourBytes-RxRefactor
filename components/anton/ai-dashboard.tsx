@@ -1,17 +1,17 @@
 'use client'
 
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo, Fragment, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles, TrendingUp, TrendingDown, Shield, Clock, Building2,
   CheckCircle2, AlertTriangle, XCircle, GitCompareArrows, Pill,
   BarChart3, FileText, Lightbulb, ArrowRight, ExternalLink,
   Globe, BookOpen, Zap, BadgeCheck, ChevronDown, Send, Copy, History, Download,
-  PanelRightClose, PanelRightOpen,
+  PanelRightClose, PanelRightOpen, User, Stethoscope, Activity,
 } from 'lucide-react'
-import { SpeakButton } from './voice-orb'
+import { SpeakButton, VoiceOrb } from './voice-orb'
 import { parseQuery, getPoliciesForDrug, getDrugById, drugs, payerPolicies } from '@/lib/mock-data'
-import { fetchComparison, askQuestion, fetchPolicyVersions, parseQueryFilters, type ApiAskResponse, type PolicyVersionRecord } from '@/lib/api'
+import { fetchComparison, askQuestion, fetchPolicyVersions, parseQueryFilters, fetchDrugs, type ApiAskResponse, type PolicyVersionRecord } from '@/lib/api'
 import type { PayerPolicy, Drug, Insight } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { PolicyMatrix } from './policy-matrix'
@@ -469,28 +469,57 @@ function RenderedMarkdown({ text }: { text: string }) {
   // Parse markdown-like text into React elements
   const lines = text.split('\n')
   const elements: React.ReactNode[] = []
-  let listBuffer: string[] = []
+  let bulletBuffer: string[] = []
+  let numberedBuffer: { num: string; text: string }[] = []
 
-  const flushList = () => {
-    if (listBuffer.length > 0) {
+  const flushBullets = () => {
+    if (bulletBuffer.length > 0) {
       elements.push(
-        <ul key={`list-${elements.length}`} className="space-y-1.5 my-2">
-          {listBuffer.map((item, j) => (
-            <li key={j} className="flex items-start gap-2 text-[15px] leading-relaxed text-slate-700">
-              <span className="mt-2 w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+        <ul key={`ul-${elements.length}`} className="space-y-1.5 my-2.5 ml-1">
+          {bulletBuffer.map((item, j) => (
+            <li key={j} className="flex items-start gap-2.5 text-[14.5px] leading-relaxed text-slate-700">
+              <span className="mt-[9px] w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
               <span>{renderInline(item)}</span>
             </li>
           ))}
         </ul>
       )
-      listBuffer = []
+      bulletBuffer = []
     }
   }
 
+  const flushNumbered = () => {
+    if (numberedBuffer.length > 0) {
+      elements.push(
+        <ol key={`ol-${elements.length}`} className="space-y-1.5 my-2.5 ml-1">
+          {numberedBuffer.map((item, j) => (
+            <li key={j} className="flex items-start gap-2.5 text-[14.5px] leading-relaxed text-slate-700">
+              <span className="mt-[1px] min-w-[22px] h-[22px] rounded-full bg-indigo-50 text-indigo-600 text-[11px] font-bold flex items-center justify-center flex-shrink-0 border border-indigo-100">{item.num}</span>
+              <span>{renderInline(item.text)}</span>
+            </li>
+          ))}
+        </ol>
+      )
+      numberedBuffer = []
+    }
+  }
+
+  const flushAll = () => {
+    flushBullets()
+    flushNumbered()
+  }
+
   const renderInline = (line: string): React.ReactNode[] => {
-    return line.split(/(\*\*.*?\*\*)/).map((part, i) => {
+    // Handle **bold**, *italic*, and `code`
+    return line.split(/(\*\*.*?\*\*|\*[^*]+\*|`[^`]+`)/).map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
         return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
+      }
+      if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) {
+        return <em key={i} className="italic text-slate-600">{part.slice(1, -1)}</em>
+      }
+      if (part.startsWith('`') && part.endsWith('`')) {
+        return <code key={i} className="px-1.5 py-0.5 bg-slate-100 text-indigo-700 text-[13px] rounded font-mono">{part.slice(1, -1)}</code>
       }
       return <span key={i}>{part}</span>
     })
@@ -500,56 +529,91 @@ function RenderedMarkdown({ text }: { text: string }) {
     const line = lines[i].trim()
 
     if (!line) {
-      flushList()
+      flushAll()
       continue
     }
 
-    // Headings
-    if (line.startsWith('## ')) {
-      flushList()
+    // ### Sub-headings (payer headings, section headings)
+    if (line.startsWith('### ')) {
+      flushAll()
       elements.push(
-        <h3 key={`h-${i}`} className="text-sm font-bold text-slate-900 mt-4 mb-1.5 flex items-center gap-2">
+        <h4 key={`h3-${i}`} className="text-[13.5px] font-bold text-slate-900 mt-4 mb-1.5 flex items-center gap-2">
           <span className="w-1 h-4 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500" />
+          {renderInline(line.slice(4))}
+        </h4>
+      )
+      continue
+    }
+
+    // ## Major headings
+    if (line.startsWith('## ')) {
+      flushAll()
+      elements.push(
+        <h3 key={`h2-${i}`} className="text-sm font-bold text-slate-900 mt-4 mb-1.5 flex items-center gap-2 pb-1.5 border-b border-slate-100">
+          <span className="w-1.5 h-4 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500" />
           {renderInline(line.slice(3))}
         </h3>
       )
       continue
     }
 
+    // # Top headings
     if (line.startsWith('# ')) {
-      flushList()
+      flushAll()
       elements.push(
-        <h2 key={`h-${i}`} className="text-base font-bold text-slate-900 mt-3 mb-2">
+        <h2 key={`h1-${i}`} className="text-base font-bold text-slate-900 mt-3 mb-2">
           {renderInline(line.slice(2))}
         </h2>
       )
       continue
     }
 
+    // Numbered list (1. 2. 3. etc.)
+    const numberedMatch = line.match(/^(\d+)[.)]\s+(.+)/)
+    if (numberedMatch) {
+      flushBullets()
+      numberedBuffer.push({ num: numberedMatch[1], text: numberedMatch[2] })
+      continue
+    }
+
     // Bullet points
     if (line.startsWith('- ') || line.startsWith('• ') || line.startsWith('* ')) {
-      listBuffer.push(line.slice(2))
+      flushNumbered()
+      bulletBuffer.push(line.slice(2))
       continue
     }
 
     // Horizontal rule / separator
     if (line.startsWith('---')) {
-      flushList()
-      elements.push(<hr key={`hr-${i}`} className="border-slate-200 my-3" />)
+      flushAll()
+      elements.push(<hr key={`hr-${i}`} className="border-slate-100 my-3" />)
+      continue
+    }
+
+    // "Not available" / "not specified" callouts — highlight in amber
+    const lower = line.toLowerCase()
+    if (lower.includes('not available in our data') || lower.includes('not specified in the policy') || lower.includes('do not have coverage data')) {
+      flushAll()
+      elements.push(
+        <div key={`callout-${i}`} className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 my-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+          <p className="text-[13.5px] leading-relaxed text-amber-800">{renderInline(line)}</p>
+        </div>
+      )
       continue
     }
 
     // Normal paragraph
-    flushList()
+    flushAll()
     elements.push(
-      <p key={`p-${i}`} className="text-[15px] leading-relaxed text-slate-700 my-1.5">
+      <p key={`p-${i}`} className="text-[14.5px] leading-relaxed text-slate-700 my-1.5">
         {renderInline(line)}
       </p>
     )
   }
-  flushList()
+  flushAll()
 
-  return <div>{elements}</div>
+  return <div className="space-y-0.5">{elements}</div>
 }
 
 // ============= INLINE COMPARISON TABLE (shown in chat for comparison queries) =============
@@ -1315,6 +1379,113 @@ export function AIDashboard({ query }: AIDashboardProps) {
   const [aiLoading, setAiLoading] = useState(true)
   const [followUp, setFollowUp] = useState('')
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [selectedSuggIdx, setSelectedSuggIdx] = useState(-1)
+  const [drugNames, setDrugNames] = useState<string[]>([])
+  const followUpRef = useRef<HTMLInputElement>(null)
+
+  // Payer names for autocomplete
+  const PAYER_NAMES = ['Cigna', 'UnitedHealthcare', 'Blue Cross Blue Shield', 'Priority Health', 'UPMC', 'EmblemHealth', 'Florida Blue']
+
+  // Query templates that combine with drug/payer names
+  const QUERY_TEMPLATES = [
+    'Does {payer} cover {drug}?',
+    'Compare {drug} across payers',
+    '{drug} step therapy details',
+    '{drug} prior authorization requirements',
+    'What changed this quarter?',
+    '{drug} site of care options',
+    '{drug} coverage criteria',
+    '{drug} dosing limits',
+  ]
+
+  // Fetch drug names on mount for autocomplete
+  useEffect(() => {
+    fetchDrugs().then(d => setDrugNames(d.map(drug => drug.name))).catch(() => {})
+  }, [])
+
+  // Build autocomplete suggestions based on input
+  const updateSuggestions = useCallback((input: string) => {
+    if (!input.trim() || input.length < 2) {
+      setSuggestions([])
+      setShowSuggestions(false)
+      return
+    }
+    const lower = input.toLowerCase()
+    const results: string[] = []
+
+    // Match drug names
+    const matchedDrugs = drugNames.filter(d => d.toLowerCase().includes(lower))
+    // Match payer names
+    const matchedPayers = PAYER_NAMES.filter(p => p.toLowerCase().includes(lower))
+
+    // Generate contextual suggestions
+    for (const drug of matchedDrugs.slice(0, 3)) {
+      results.push(`Does Cigna cover ${drug}?`)
+      results.push(`${drug} step therapy details`)
+      results.push(`Compare ${drug} across payers`)
+      results.push(`${drug} prior authorization requirements`)
+    }
+    for (const payer of matchedPayers.slice(0, 2)) {
+      results.push(`Does ${payer} cover Rituximab?`)
+      results.push(`What does ${payer} cover?`)
+    }
+
+    // Also match partial templates
+    if (lower.includes('compare')) {
+      for (const drug of drugNames.slice(0, 4)) {
+        results.push(`Compare ${drug} across payers`)
+      }
+    }
+    if (lower.includes('step')) {
+      for (const drug of drugNames.slice(0, 4)) {
+        results.push(`${drug} step therapy details`)
+      }
+    }
+    if (lower.includes('prior') || lower.includes('auth')) {
+      for (const drug of drugNames.slice(0, 4)) {
+        results.push(`${drug} prior authorization requirements`)
+      }
+    }
+    if (lower.includes('change') || lower.includes('update')) {
+      results.push('What changed this quarter?')
+    }
+
+    // Deduplicate and limit
+    const unique = [...new Set(results)].slice(0, 6)
+    setSuggestions(unique)
+    setShowSuggestions(unique.length > 0)
+    setSelectedSuggIdx(-1)
+  }, [drugNames])
+
+  const handleFollowUpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFollowUp(e.target.value)
+    updateSuggestions(e.target.value)
+  }
+
+  const selectSuggestion = (s: string) => {
+    setFollowUp(s)
+    setShowSuggestions(false)
+    setSuggestions([])
+    followUpRef.current?.focus()
+  }
+
+  const handleFollowUpKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || suggestions.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedSuggIdx(prev => (prev + 1) % suggestions.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedSuggIdx(prev => (prev <= 0 ? suggestions.length - 1 : prev - 1))
+    } else if (e.key === 'Tab' || (e.key === 'Enter' && selectedSuggIdx >= 0)) {
+      e.preventDefault()
+      selectSuggestion(suggestions[selectedSuggIdx >= 0 ? selectedSuggIdx : 0])
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false)
+    }
+  }
 
   // Fetch from API on mount — structured data first, AI answer async
   useEffect(() => {
@@ -1410,8 +1581,8 @@ export function AIDashboard({ query }: AIDashboardProps) {
     return (
       <div className="p-6">
         <div className="flex items-start gap-3 mb-6">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-bold text-white">Rx</span>
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-indigo-200 ring-2 ring-white">
+            <Stethoscope className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1 space-y-3 pt-1">
             <p className="text-sm font-semibold text-slate-700">Analyzing policy documents...</p>
@@ -1449,8 +1620,8 @@ export function AIDashboard({ query }: AIDashboardProps) {
             <div className="bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-2xl rounded-tr-sm px-5 py-3 max-w-lg shadow-sm">
               <p className="text-sm leading-relaxed">{query}</p>
             </div>
-            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
-              JD
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center flex-shrink-0 shadow-md shadow-slate-200 ring-2 ring-white">
+              <User className="w-4.5 h-4.5 text-slate-200" />
             </div>
           </motion.div>
 
@@ -1461,8 +1632,8 @@ export function AIDashboard({ query }: AIDashboardProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
           >
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-              <span className="text-xs font-bold text-white">Rx</span>
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-indigo-200 ring-2 ring-white">
+              <Stethoscope className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1 min-w-0 space-y-2.5">
               {/* Comparison table — only for comparison queries */}
@@ -1481,9 +1652,20 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
               {/* Answer card — only show when NOT a comparison query with data */}
               {!(isComparisonQuery(query) && comparisonPolicies) && (
-                <div className="bg-white rounded-2xl rounded-tl-sm border border-slate-200 p-5 shadow-sm">
+                <div className="bg-white rounded-2xl rounded-tl-sm border border-slate-200 p-6 shadow-sm">
                   {aiResponse ? (
-                    <RenderedMarkdown text={answerText} />
+                    <div>
+                      <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+                            <Sparkles className="w-3 h-3 text-white" />
+                          </div>
+                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">AI Analysis</span>
+                        </div>
+                        <SpeakButton text={plainAnswer} />
+                      </div>
+                      <RenderedMarkdown text={answerText} />
+                    </div>
                   ) : aiLoading ? (
                     <div className="space-y-2">
                       {dashboard.summary ? (
@@ -1542,13 +1724,57 @@ export function AIDashboard({ query }: AIDashboardProps) {
         {/* Follow-up input (sticky bottom) */}
         <div className="border-t border-slate-200 bg-white px-6 py-3">
           <form onSubmit={handleFollowUp} className="flex items-center gap-2">
-            <input
-              type="text"
-              value={followUp}
-              onChange={e => setFollowUp(e.target.value)}
-              placeholder="Ask a follow-up question..."
-              className="flex-1 px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all placeholder:text-slate-400"
+            <VoiceOrb
+              onTranscript={(text) => {
+                setFollowUp(text)
+                // Auto-submit after voice input
+                setTimeout(() => {
+                  window.location.href = `/results?q=${encodeURIComponent(text)}`
+                }, 300)
+              }}
+              size="sm"
             />
+            <div className="flex-1 relative">
+              <input
+                ref={followUpRef}
+                type="text"
+                value={followUp}
+                onChange={handleFollowUpChange}
+                onKeyDown={handleFollowUpKeyDown}
+                onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
+                onBlur={() => { setTimeout(() => setShowSuggestions(false), 200) }}
+                placeholder="Ask a follow-up question..."
+                className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all placeholder:text-slate-400"
+              />
+              {/* Autocomplete dropdown */}
+              <AnimatePresence>
+                {showSuggestions && suggestions.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    className="absolute bottom-full left-0 right-0 mb-1.5 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50"
+                  >
+                    {suggestions.map((s, i) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); selectSuggestion(s) }}
+                        className={cn(
+                          'w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2.5',
+                          i === selectedSuggIdx
+                            ? 'bg-indigo-50 text-indigo-700'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        )}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                        <span className="truncate">{s}</span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             <button
               type="submit"
               disabled={!followUp.trim()}

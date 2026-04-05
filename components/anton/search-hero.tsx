@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Sparkles, ArrowRight, GitCompareArrows, Target, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { VoiceOrb } from './voice-orb'
@@ -10,6 +10,59 @@ import { useAntonStore } from '@/lib/store'
 import { soundEngine } from '@/lib/sounds'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'
+
+// Predefined questions for autocomplete — like Google search suggestions
+const ALL_SUGGESTIONS = [
+  // Drug-specific
+  'Compare Rituximab across payers',
+  'Rituximab step therapy details',
+  'Rituximab prior authorization requirements',
+  'Rituximab site of care options',
+  'Rituximab coverage criteria',
+  'Does Cigna cover Rituximab?',
+  'Does UnitedHealthcare cover Rituximab?',
+  'Compare Humira across payers',
+  'Humira step therapy details',
+  'Humira prior authorization requirements',
+  'Does Cigna cover Humira?',
+  'Does UnitedHealthcare cover Humira?',
+  'Compare Bevacizumab across payers',
+  'Bevacizumab step therapy details',
+  'Bevacizumab prior authorization requirements',
+  'Bevacizumab site of care options',
+  'Does Cigna cover Bevacizumab?',
+  'Infliximab step therapy details',
+  'Compare Infliximab across payers',
+  'Infliximab prior authorization requirements',
+  'Trastuzumab coverage criteria',
+  'Compare Trastuzumab across payers',
+  'Pembrolizumab prior authorization requirements',
+  'Compare Pembrolizumab across payers',
+  'Nivolumab step therapy details',
+  'Compare Nivolumab across payers',
+  'Ocrelizumab step therapy details',
+  'Compare Ocrelizumab across payers',
+  'Dupilumab prior authorization requirements',
+  'Compare Dupilumab across payers',
+  'Ustekinumab coverage criteria',
+  'Compare Ustekinumab across payers',
+  'Vedolizumab step therapy details',
+  'Natalizumab prior authorization requirements',
+  'Secukinumab coverage criteria',
+  'Denosumab step therapy details',
+  'Botulinum Toxin prior authorization requirements',
+  // Payer-specific
+  'What does Cigna cover?',
+  'What does UnitedHealthcare cover?',
+  'What does Blue Cross Blue Shield cover?',
+  'What does Priority Health cover?',
+  // General
+  'What changed this quarter?',
+  'Show all drugs across all payers',
+  'Which drugs require step therapy?',
+  'Which drugs require prior authorization?',
+  'Compare all drugs across payers',
+]
 
 interface SearchHeroProps {
   onSearch?: (query: string) => void
@@ -21,6 +74,10 @@ export function SearchHero({ onSearch }: SearchHeroProps) {
   const [isFocused, setIsFocused] = useState(false)
   const startProcessing = useAntonStore((state) => state.startProcessing)
   const [stats, setStats] = useState({ payers: 0, policies: 0 })
+  const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [selectedIdx, setSelectedIdx] = useState(-1)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch(`${API_BASE}/matrix`)
@@ -127,20 +184,60 @@ export function SearchHero({ onSearch }: SearchHeroProps) {
           transition={{ delay: 0.2 }}
         >
           <div className={`
-            flex items-center bg-white rounded-2xl overflow-hidden transition-all duration-300 soft-shadow-lg
+            flex items-center bg-white rounded-2xl transition-all duration-300 soft-shadow-lg relative
             ${isFocused ? 'ring-2 ring-primary/30' : 'ring-1 ring-border'}
           `}>
             <div className="pl-5 pr-2">
               <Search className={`w-5 h-5 transition-colors ${isFocused ? 'text-primary' : 'text-muted-foreground'}`} />
             </div>
             <input
+              ref={inputRef}
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
+              onChange={(e) => {
+                const val = e.target.value
+                setQuery(val)
+                if (val.trim().length >= 1) {
+                  const lower = val.toLowerCase()
+                  const matches = ALL_SUGGESTIONS.filter(s => s.toLowerCase().includes(lower)).slice(0, 6)
+                  setFilteredSuggestions(matches)
+                  setShowDropdown(matches.length > 0)
+                  setSelectedIdx(-1)
+                } else {
+                  setFilteredSuggestions([])
+                  setShowDropdown(false)
+                }
+              }}
+              onKeyDown={(e) => {
+                if (showDropdown && filteredSuggestions.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    setSelectedIdx(prev => (prev + 1) % filteredSuggestions.length)
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setSelectedIdx(prev => (prev <= 0 ? filteredSuggestions.length - 1 : prev - 1))
+                  } else if (e.key === 'Enter' && selectedIdx >= 0) {
+                    e.preventDefault()
+                    setQuery(filteredSuggestions[selectedIdx])
+                    setShowDropdown(false)
+                  } else if (e.key === 'Escape') {
+                    setShowDropdown(false)
+                  }
+                }
+              }}
+              onFocus={() => {
+                setIsFocused(true)
+                if (query.trim().length >= 1) {
+                  const lower = query.toLowerCase()
+                  const matches = ALL_SUGGESTIONS.filter(s => s.toLowerCase().includes(lower)).slice(0, 6)
+                  setFilteredSuggestions(matches)
+                  setShowDropdown(matches.length > 0)
+                }
+              }}
+              onBlur={() => { setIsFocused(false); setTimeout(() => setShowDropdown(false), 150) }}
               placeholder="e.g. Compare Rituximab across payers..."
               className="flex-1 py-4 px-2 text-base bg-transparent outline-none placeholder:text-muted-foreground/50 text-foreground"
+              autoComplete="off"
             />
             <div className="pr-2 flex items-center gap-1.5">
               <VoiceOrb onTranscript={handleVoiceTranscript} size="sm" />
@@ -153,6 +250,54 @@ export function SearchHero({ onSearch }: SearchHeroProps) {
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
+
+            {/* Autocomplete dropdown — Google-style */}
+            <AnimatePresence>
+              {showDropdown && filteredSuggestions.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute top-full left-0 right-0 mt-1 bg-white border border-border/80 rounded-2xl shadow-2xl overflow-hidden z-[100]"
+                >
+                  {filteredSuggestions.map((s, i) => {
+                    // Highlight the matching part
+                    const lower = query.toLowerCase()
+                    const idx = s.toLowerCase().indexOf(lower)
+                    const before = idx >= 0 ? s.slice(0, idx) : s
+                    const match = idx >= 0 ? s.slice(idx, idx + query.length) : ''
+                    const after = idx >= 0 ? s.slice(idx + query.length) : ''
+
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          setQuery(s)
+                          setShowDropdown(false)
+                          inputRef.current?.focus()
+                        }}
+                        className={`
+                          w-full text-left px-5 py-3 text-sm flex items-center gap-3 transition-colors
+                          ${i === selectedIdx ? 'bg-slate-50' : 'hover:bg-slate-50/70'}
+                          ${i < filteredSuggestions.length - 1 ? 'border-b border-slate-100' : ''}
+                        `}
+                      >
+                        <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        <span className="truncate">
+                          {idx >= 0 ? (
+                            <>{before}<strong className="font-semibold text-foreground">{match}</strong>{after}</>
+                          ) : s}
+                        </span>
+                        <ArrowRight className={`w-3 h-3 ml-auto flex-shrink-0 transition-opacity ${i === selectedIdx ? 'text-slate-400 opacity-100' : 'opacity-0'}`} />
+                      </button>
+                    )
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </motion.div>
       </form>
