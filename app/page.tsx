@@ -1,13 +1,11 @@
 import { AnimatedBackground } from '@/components/anton/animated-background'
 import { SearchHero } from '@/components/anton/search-hero'
-import { PipelineHint } from '@/components/anton/pipeline-hint'
 
 export default function HomePage() {
   return (
     <AnimatedBackground>
       <main className="min-h-screen flex flex-col items-center justify-center px-6 py-8">
         <SearchHero />
-        <PipelineHint />
         
         {/* Subtle footer hint */}
         <div className="mt-auto pt-8 text-center">

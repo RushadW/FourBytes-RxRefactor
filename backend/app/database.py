@@ -90,6 +90,36 @@ class SourceRecord(Base):
     active = Column(Boolean, default=True)
 
 
+class ScrapeLogRecord(Base):
+    """Log of automated scrape runs."""
+    __tablename__ = "scrape_logs"
+
+    id = Column(String, primary_key=True)
+    run_at = Column(DateTime, default=datetime.utcnow)
+    trigger = Column(String, default="manual")  # manual | cron
+    payers_scraped = Column(Integer, default=0)
+    documents_fetched = Column(Integer, default=0)
+    policies_updated = Column(Integer, default=0)
+    policies_added = Column(Integer, default=0)
+    errors = Column(JSON, nullable=True)
+    summary = Column(Text, nullable=True)
+
+
+class NotificationRecord(Base):
+    """Notifications for policy updates."""
+    __tablename__ = "notifications"
+
+    id = Column(String, primary_key=True)
+    type = Column(String, default="policy_update")  # policy_update | scrape_complete | error
+    title = Column(String)
+    message = Column(Text)
+    policy_id = Column(String, nullable=True)
+    payer_id = Column(String, nullable=True)
+    drug_id = Column(String, nullable=True)
+    read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # ---------- helpers ----------
 
 def init_db():

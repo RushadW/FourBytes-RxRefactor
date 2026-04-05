@@ -274,3 +274,68 @@ export async function fetchMatrix(): Promise<MatrixResponse> {
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
 }
+
+
+// ---------- Policy Bank ----------
+
+export interface PolicyBankItem {
+  id: string
+  drug_id: string
+  drug_name: string
+  generic_name: string
+  drug_category: string
+  payer_id: string
+  payer_name: string
+  policy_title: string
+  covered: boolean | null
+  access_status: string
+  effective_date: string
+  last_updated: string
+  version: number
+  document_id: string | null
+  source_url: string
+  file_path: string
+}
+
+export async function fetchPolicyBank(): Promise<PolicyBankItem[]> {
+  const res = await fetch(`${API_BASE}/policy-bank`)
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
+
+// ---------- Notifications ----------
+
+export interface Notification {
+  id: string
+  type: string
+  title: string
+  message: string
+  policy_id: string | null
+  payer_id: string | null
+  drug_id: string | null
+  read: boolean
+  created_at: string
+}
+
+export async function fetchNotifications(unreadOnly = false): Promise<Notification[]> {
+  const params = unreadOnly ? '?unread_only=true' : ''
+  const res = await fetch(`${API_BASE}/notifications${params}`)
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  await fetch(`${API_BASE}/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' })
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await fetch(`${API_BASE}/notifications/read-all`, { method: 'POST' })
+}
+
+
+// ---------- Document Download ----------
+
+export function getDocumentDownloadUrl(docId: string): string {
+  return `${API_BASE}/documents/${encodeURIComponent(docId)}/view`
+}

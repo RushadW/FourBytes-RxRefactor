@@ -4,7 +4,6 @@ import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/sonner'
 import { AppSidebar } from '@/components/anton/app-sidebar'
-import { ChatPanelWrapper } from '@/components/anton/chat-panel-wrapper'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -52,7 +51,6 @@ export default function RootLayout({
               {children}
             </div>
           </div>
-          <ChatPanelWrapper />
         </Providers>
         <Toaster position="bottom-right" />
         {process.env.NODE_ENV === 'production' && <Analytics />}

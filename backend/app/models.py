@@ -177,3 +177,49 @@ class ScrapeAllResult(BaseModel):
     total_fetched: int
     total_stored: int
     per_payer: list[ScrapeResult] = []
+
+
+# ---------- Notifications ----------
+class NotificationResponse(BaseModel):
+    id: str
+    type: str
+    title: str
+    message: str
+    policy_id: str | None = None
+    payer_id: str | None = None
+    drug_id: str | None = None
+    read: bool
+    created_at: str
+
+
+# ---------- Policy Bank ----------
+class PolicyBankItem(BaseModel):
+    id: str
+    drug_id: str
+    drug_name: str
+    generic_name: str
+    drug_category: str
+    payer_id: str
+    payer_name: str
+    policy_title: str
+    covered: bool | None = None
+    access_status: str = ""
+    effective_date: str = ""
+    last_updated: str = ""
+    version: int
+    document_id: str | None = None
+    source_url: str = ""
+    file_path: str = ""
+
+
+# ---------- Scrape Log ----------
+class ScrapeLogResponse(BaseModel):
+    id: str
+    run_at: str
+    trigger: str
+    payers_scraped: int
+    documents_fetched: int
+    policies_updated: int
+    policies_added: int
+    errors: list[str] = []
+    summary: str = ""

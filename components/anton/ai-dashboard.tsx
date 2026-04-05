@@ -6,7 +6,7 @@ import {
   Sparkles, TrendingUp, TrendingDown, Shield, Clock, Building2,
   CheckCircle2, AlertTriangle, XCircle, GitCompareArrows, Pill,
   BarChart3, FileText, Lightbulb, ArrowRight, ExternalLink,
-  Globe, BookOpen, Zap, BadgeCheck, ChevronDown, Send, Copy, History,
+  Globe, BookOpen, Zap, BadgeCheck, ChevronDown, Send, Copy, History, Download,
 } from 'lucide-react'
 import { SpeakButton } from './voice-orb'
 import { parseQuery, getPoliciesForDrug, getDrugById, drugs, payerPolicies } from '@/lib/mock-data'
@@ -97,7 +97,7 @@ function QuickStatsWidget({ policies, drug }: { policies: PayerPolicy[]; drug: D
   const stats = [
     { label: 'Policies Analyzed', value: policies.length * 4, icon: FileText, color: 'text-primary' },
     { label: 'Payers Compared', value: policies.length, icon: Building2, color: 'text-primary' },
-    { label: 'Require PA', value: policies.filter(p => p.priorAuth).length, icon: Shield, color: 'text-amber-500' },
+    { label: 'Prior Auth Required', value: policies.filter(p => p.priorAuth).length, icon: Shield, color: 'text-amber-500' },
     { label: 'Step Therapy', value: policies.filter(p => p.stepTherapy).length, icon: Clock, color: 'text-primary' },
   ]
   
@@ -310,8 +310,8 @@ function CoverageVerdictWidget({ policies, payerName }: { policies: PayerPolicy[
               <p className="text-xs text-muted-foreground">{drugInfo?.therapeuticArea}</p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
-              {policy.priorAuth && <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">PA</span>}
-              {policy.stepTherapy && <span className="text-[10px] font-medium text-rose-600 bg-rose-50 px-2 py-1 rounded-full border border-rose-200">ST</span>}
+              {policy.priorAuth && <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">Prior Auth</span>}
+              {policy.stepTherapy && <span className="text-[10px] font-medium text-rose-600 bg-rose-50 px-2 py-1 rounded-full border border-rose-200">Step Therapy</span>}
               <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">Covered</span>
             </div>
           </motion.div>
@@ -614,8 +614,8 @@ function DrugComparisonTable({ policies, drug }: {
         label: 'PRIOR AUTHORIZATION',
         color: 'text-amber-600',
         rows: [
-          { field: 'PA Required', key: 'pa' },
-          { field: 'PA Criteria / Details', key: 'pa_details' },
+          { field: 'Prior Authorization Required', key: 'pa' },
+          { field: 'Prior Authorization Criteria', key: 'pa_details' },
         ],
       },
       {
@@ -680,12 +680,16 @@ function DrugComparisonTable({ policies, drug }: {
           return pol.prior_auth
             ? { text: '✓ Required', badge: 'text-amber-700 bg-amber-50 border-amber-200' }
             : { text: '✗ Not Required', style: 'text-slate-400' }
-        case 'pa_details': return { text: pol.prior_auth_details || (pol.prior_auth ? 'Details not available' : 'N/A — No PA required'), style: pol.prior_auth ? 'text-slate-700 text-[11px] leading-snug' : 'text-slate-400 italic text-[11px]' }
+        case 'pa_details':
+          if (!pol.prior_auth) return { text: 'N/A — No prior authorization required', style: 'text-slate-400 italic text-[11px]' }
+          return { text: pol.prior_auth_details || 'Details not available', style: 'text-slate-700 text-[11px] leading-snug' }
         case 'st':
           return pol.step_therapy
             ? { text: '✓ Required', badge: 'text-violet-700 bg-violet-50 border-violet-200' }
             : { text: '✗ Not Required', style: 'text-slate-400' }
-        case 'st_details': return { text: pol.step_therapy_details || (pol.step_therapy ? 'Details not available' : 'N/A — No step therapy'), style: pol.step_therapy ? 'text-slate-700 text-[11px] leading-snug' : 'text-slate-400 italic text-[11px]' }
+        case 'st_details':
+          if (!pol.step_therapy) return { text: 'N/A — No step therapy required', style: 'text-slate-400 italic text-[11px]' }
+          return { text: pol.step_therapy_details || 'Details not available', style: 'text-slate-700 text-[11px] leading-snug' }
         case 'soc': {
           const sites = pol.site_of_care
           if (!sites || sites.length === 0) return { text: 'No restrictions', style: 'text-slate-400 italic' }
@@ -722,6 +726,49 @@ function DrugComparisonTable({ policies, drug }: {
     const coveredCount = policies.filter(p => p.covered).length
     const restrictedCount = policies.filter(p => p.covered && p.access_status !== 'preferred').length
 
+    // ── Export helpers ──
+    const exportCSV = () => {
+      const headers = ['Field', ...payers.map(p => p.name)]
+      const rows: string[][] = []
+      for (const section of sections) {
+        rows.push([`--- ${section.label} ---`, ...payers.map(() => '')])
+        for (const row of section.rows) {
+          const cells = payers.map(p => {
+            const val = getCellValue(policyByPayer.get(p.id), row.key)
+            return val.text
+          })
+          rows.push([row.field, ...cells])
+        }
+      }
+      const csvContent = [headers, ...rows].map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${drugName.replace(/\s+/g, '_')}_comparison.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+
+    const exportPDF = () => {
+      const printWindow = window.open('', '_blank')
+      if (!printWindow) return
+      const tableRows = sections.flatMap(section => [
+        `<tr style="background:#f8fafc"><td colspan="${payers.length + 1}" style="padding:8px 12px;font-weight:bold;font-size:11px;text-transform:uppercase;color:#6366f1;letter-spacing:1px">${section.label}</td></tr>`,
+        ...section.rows.map(row => {
+          const cells = payers.map(p => {
+            const val = getCellValue(policyByPayer.get(p.id), row.key)
+            return `<td style="padding:8px 12px;font-size:12px;border-bottom:1px solid #f1f5f9">${val.text}</td>`
+          })
+          return `<tr><td style="padding:8px 12px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;border-bottom:1px solid #f1f5f9">${row.field}</td>${cells.join('')}</tr>`
+        }),
+      ])
+      const html = `<!DOCTYPE html><html><head><title>${drugName} — Payer Comparison</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:40px;color:#1e293b}table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0}th{text-align:left;padding:10px 12px;background:#f8fafc;font-size:12px;font-weight:700;border-bottom:2px solid #e2e8f0}h1{font-size:20px;margin-bottom:4px}p{color:#64748b;font-size:13px;margin-top:0}.footer{margin-top:20px;font-size:11px;color:#94a3b8}@media print{body{margin:20px}}</style></head><body><h1>${drugName}</h1><p>${subtitle || ''}</p><table><thead><tr><th>Field</th>${payers.map(p => `<th>${p.name}</th>`).join('')}</tr></thead><tbody>${tableRows.join('')}</tbody></table><p class="footer">Exported from AntonRx · ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p></body></html>`
+      printWindow.document.write(html)
+      printWindow.document.close()
+      printWindow.onload = () => { printWindow.print() }
+    }
+
     return (
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         {/* Header */}
@@ -731,7 +778,7 @@ function DrugComparisonTable({ policies, drug }: {
               <h3 className="text-base font-bold text-slate-900">{drugName}</h3>
               {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex items-center gap-2">
               {coveredCount > 0 && (
                 <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                   {coveredCount} Covered
@@ -742,6 +789,19 @@ function DrugComparisonTable({ policies, drug }: {
                   {restrictedCount} Restricted
                 </span>
               )}
+              <span className="w-px h-4 bg-slate-200" />
+              <button
+                onClick={exportCSV}
+                className="flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors"
+              >
+                <Download className="w-3 h-3" /> CSV
+              </button>
+              <button
+                onClick={exportPDF}
+                className="flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors"
+              >
+                <Download className="w-3 h-3" /> PDF
+              </button>
             </div>
           </div>
         </div>
@@ -879,8 +939,8 @@ function PolicyDetailCards({ policies }: { policies: ApiAskResponse['relevant_po
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {pol.prior_auth && <span className="text-[8px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">PA</span>}
-                  {pol.step_therapy && <span className="text-[8px] font-semibold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">ST</span>}
+                  {pol.prior_auth && <span className="text-[8px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Prior Auth</span>}
+                  {pol.step_therapy && <span className="text-[8px] font-semibold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">Step Therapy</span>}
                   <ChevronDown className={cn('w-3.5 h-3.5 text-slate-400 transition-transform', isOpen && 'rotate-180')} />
                 </div>
               </button>
@@ -918,7 +978,7 @@ function PolicyDetailCards({ policies }: { policies: ApiAskResponse['relevant_po
                             ? pol.covered_indications.join(', ')
                             : 'Not specified'
                         } muted={!pol.covered_indications?.length} />
-                        {/* 5. PA */}
+                        {/* 5. Prior Authorization */}
                         <DetailRow label="Prior Auth" value={pol.prior_auth ? `Required — ${pol.prior_auth_details || 'See policy'}` : 'Not required'} muted={!pol.prior_auth} />
                         {/* 6. Step Therapy */}
                         <DetailRow label="Step Therapy" value={pol.step_therapy ? `Required — ${pol.step_therapy_details || 'See policy'}` : 'Not required'} muted={!pol.step_therapy} />
@@ -1251,7 +1311,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
   const handleFollowUp = (e: React.FormEvent) => {
     e.preventDefault()
     if (!followUp.trim()) return
-    window.location.href = `/processing?q=${encodeURIComponent(followUp)}`
+    window.location.href = `/results?q=${encodeURIComponent(followUp)}`
   }
 
   // ── Loading state ──
@@ -1367,9 +1427,16 @@ export function AIDashboard({ query }: AIDashboardProps) {
             </motion.div>
           )}
 
-          {/* Widgets */}
+          {/* Widgets — hide redundant ones when comparison table is already shown */}
           {dashboard.widgets
             .filter(w => w.type !== 'quick-stats')
+            .filter(w => {
+              if (isComparisonQuery(query) && aiResponse?.relevant_policies && aiResponse.relevant_policies.length > 1) {
+                // Comparison table already covers these
+                return !['full-matrix', 'comparison-cards', 'step-therapy-visual', 'site-of-care', 'key-insight'].includes(w.type)
+              }
+              return true
+            })
             .map((widget, i) => renderWidget(widget, i))}
         </div>
 
@@ -1418,14 +1485,6 @@ export function AIDashboard({ query }: AIDashboardProps) {
           </motion.div>
         )}
 
-        {/* Quick Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <QuickActions />
-        </motion.div>
       </div>
     </div>
   )

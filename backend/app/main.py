@@ -7,12 +7,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routes import router
 from app.seed import seed_all
+from app.scheduler import start_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: seed DB + vector store if empty
     seed_all()
+    # Start weekly auto-scraper daemon
+    start_scheduler()
     yield
     # Shutdown: nothing to clean up
 

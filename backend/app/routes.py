@@ -9,12 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.database import get_db, PolicyRecord, DocumentRecord, PolicyVersionRecord
+from app.database import get_db, PolicyRecord, DocumentRecord, PolicyVersionRecord, NotificationRecord, ScrapeLogRecord
 from app.models import (
     PolicyResponse, Drug, ComparisonResponse, PayerColumn,
     AskRequest, AskResponse, SearchResult, ChangeSummary, FieldChange,
     DocumentResponse, PolicyVersion, SourceInfo, ScrapeResult, ScrapeAllResult,
     IngestResult, MatrixResponse, MatrixRow, MatrixDrug, MatrixPayer, MatrixCell,
+    NotificationResponse, PolicyBankItem, ScrapeLogResponse,
 )
 from app.seed import DRUGS, PAYERS
 from app.rag import search as rag_search, generate_answer
@@ -590,3 +591,114 @@ async def upload_document(
         documents_stored=1 if result.get("status") == "ingested" else 0,
         message=result.get("reason", f"Document {result.get('status', 'processed')}"),
     )
+
+
+# ---------- Policy Bank ----------
+
+@router.get("/policy-bank", response_model=list[PolicyBankItem])
+def get_policy_bank(db: Session = Depends(get_db)):
+    """Return all policies with document metadata for the Policy Bank page."""
+    policies = db.query(PolicyRecord).order_by(PolicyRecord.payer_name, PolicyRecord.drug_name).all()
+    items: list[PolicyBankItem] = []
+    for p in policies:
+        source_url = ""
+        file_path = ""
+        if p.document_id:
+            doc = db.query(DocumentRecord).filter_by(id=p.document_id).first()
+            if doc:
+                source_url = doc.source_url or ""
+                file_path = doc.file_path or ""
+        items.append(PolicyBankItem(
+            id=p.id,
+            drug_id=p.drug_id,
+            drug_name=p.drug_name or "",
+            generic_name=p.generic_name or "",
+            drug_category=p.drug_category or "",
+            payer_id=p.payer_id,
+            payer_name=p.payer_name or "",
+            policy_title=p.policy_title or "",
+            covered=p.covered,
+            access_status=p.access_status or "",
+            effective_date=p.effective_date or "",
+            last_updated=p.last_updated or "",
+            version=p.version or 1,
+            document_id=p.document_id,
+            source_url=source_url,
+            file_path=file_path,
+        ))
+    return items
+
+
+# ---------- Notifications ----------
+
+@router.get("/notifications", response_model=list[NotificationResponse])
+def get_notifications(unread_only: bool = Query(False), db: Session = Depends(get_db)):
+    """Return notifications, optionally filtered to unread only."""
+    q = db.query(NotificationRecord).order_by(NotificationRecord.created_at.desc())
+    if unread_only:
+        q = q.filter(NotificationRecord.read == False)
+    return [
+        NotificationResponse(
+            id=n.id,
+            type=n.type or "policy_update",
+            title=n.title or "",
+            message=n.message or "",
+            policy_id=n.policy_id,
+            payer_id=n.payer_id,
+            drug_id=n.drug_id,
+            read=n.read or False,
+            created_at=n.created_at.isoformat() if n.created_at else "",
+        )
+        for n in q.limit(50).all()
+    ]
+
+
+@router.post("/notifications/{notif_id}/read")
+def mark_notification_read(notif_id: str, db: Session = Depends(get_db)):
+    """Mark a notification as read."""
+    n = db.query(NotificationRecord).filter_by(id=notif_id).first()
+    if not n:
+        raise HTTPException(404, "Notification not found")
+    n.read = True
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/notifications/read-all")
+def mark_all_notifications_read(db: Session = Depends(get_db)):
+    """Mark all notifications as read."""
+    db.query(NotificationRecord).filter(NotificationRecord.read == False).update({"read": True})
+    db.commit()
+    return {"status": "ok"}
+
+
+# ---------- Scrape Logs ----------
+
+@router.get("/scrape-logs", response_model=list[ScrapeLogResponse])
+def get_scrape_logs(db: Session = Depends(get_db)):
+    """Return recent scrape logs."""
+    logs = db.query(ScrapeLogRecord).order_by(ScrapeLogRecord.run_at.desc()).limit(20).all()
+    return [
+        ScrapeLogResponse(
+            id=log.id,
+            run_at=log.run_at.isoformat() if log.run_at else "",
+            trigger=log.trigger or "manual",
+            payers_scraped=log.payers_scraped or 0,
+            documents_fetched=log.documents_fetched or 0,
+            policies_updated=log.policies_updated or 0,
+            policies_added=log.policies_added or 0,
+            errors=log.errors or [],
+            summary=log.summary or "",
+        )
+        for log in logs
+    ]
+
+
+# ---------- Manual Scrape Trigger ----------
+
+@router.post("/scrape-now")
+def trigger_scrape_now(db: Session = Depends(get_db)):
+    """Trigger an immediate scrape cycle (same as cron but manual)."""
+    from app.scheduler import run_scrape_now
+    result = run_scrape_now(trigger="manual")
+    return result

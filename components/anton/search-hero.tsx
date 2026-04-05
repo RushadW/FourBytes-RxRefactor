@@ -27,7 +27,7 @@ export function SearchHero({ onSearch }: SearchHeroProps) {
     if (onSearch) {
       onSearch(query)
     } else {
-      router.push(`/processing?q=${encodeURIComponent(query)}`)
+      router.push(`/results?q=${encodeURIComponent(query)}`)
     }
   }
 
@@ -35,7 +35,7 @@ export function SearchHero({ onSearch }: SearchHeroProps) {
     setQuery(text)
     soundEngine?.processingStart()
     startProcessing(text)
-    router.push(`/processing?q=${encodeURIComponent(text)}`)
+    router.push(`/results?q=${encodeURIComponent(text)}`)
   }
 
   const handleQuerySelect = (selectedQuery: string) => {
