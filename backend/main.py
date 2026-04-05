@@ -1,5 +1,8 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.db.database import init_db, SessionLocal
 from backend.routers import ingest, query, compare, policies, mlops
@@ -50,9 +53,17 @@ app.include_router(compare.router, prefix="/api/v1")
 app.include_router(policies.router, prefix="/api/v1")
 app.include_router(mlops.router, prefix="/api/v1")
 
+# Serve the HTML mockup as the main UI
+_MOCKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mockup")
+if os.path.isdir(_MOCKUP_DIR):
+    app.mount("/static", StaticFiles(directory=_MOCKUP_DIR), name="static")
+
 
 @app.get("/")
 def root():
+    index = os.path.join(_MOCKUP_DIR, "index.html")
+    if os.path.isfile(index):
+        return FileResponse(index, media_type="text/html")
     return {
         "name": "Medical Benefit Drug Policy Tracker",
         "version": "2.0.0",

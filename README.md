@@ -6,49 +6,60 @@ AI-powered system to ingest, extract, compare, and query medical benefit drug po
 
 ## Quick Start
 
-### 1. Install dependencies
+### 1. Create a virtual environment (recommended)
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+```
+
+### 2. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure API key
+### 3. Configure API key
 ```bash
 cp .env.example .env
 # Edit .env — set ANTHROPIC_API_KEY or GEMINI_API_KEY (see Free Deployment below)
 ```
 
-### 3. Initialize and migrate the database
+### 4. Initialize and migrate the database
 ```bash
 python scripts/init_db.py      # creates all tables from ORM
 python scripts/migrate_v2.py   # adds v2 columns, new tables, seeds v2.0 prompts
 ```
 
-### 4. Start the application
+### 5. Start the application
 
 **Windows (one command):**
 ```
 start.bat
 ```
+`start.bat` auto-detects the `.venv` folder and uses it; falls back to system Python if not found.
 
 **Manual (two terminals):**
 ```bash
-# Terminal 1 — Backend
+# Terminal 1 — Backend + UI (port 8000)
 uvicorn backend.main:app --reload --port 8000
 
-# Terminal 2 — Frontend
-streamlit run frontend/app.py --server.port 8501
+# Terminal 2 — Streamlit (port 8501, optional)
+streamlit run frontend/app.py --server.port 8501 --server.headless true
 ```
 
-### 5. Load demo data
+### 6. Load demo data
 ```bash
 python scripts/seed_demo.py
 ```
 
-### 6. Open the UI
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:8501 |
-| API Docs | http://localhost:8000/docs |
+### 7. Open the UI
+| Interface | URL | Notes |
+|---|---|---|
+| **Main UI** (HTML mockup) | http://localhost:8000 | Served by FastAPI — full featured |
+| **Streamlit UI** | http://localhost:8501 | Alternative interface |
+| **API Docs** | http://localhost:8000/docs | Swagger / OpenAPI |
 
 ---
 
@@ -61,12 +72,13 @@ python scripts/seed_demo.py
 | **Three-Tier Query Router** | Tier 1 — structured DB ($0.00, no LLM) → Tier 2 — Claude synthesis → Tier 3 — full RAG with ChromaDB |
 | **Benefit Side** | `medical / pharmacy / both / unknown` on every coverage policy; surfaced in all query, compare, and grid UIs |
 | **Data Completeness** | `high / medium / low` badge per policy; shown in compare headers and coverage grid |
-| **Coverage Grid** | Drug × Plan matrix with colour-coded C / R / N / ? cells; filterable by benefit side and status |
-| **Ask AI** | Natural language Q&A; every response includes routing tier label and cost badge |
+| **Coverage Grid** | Drug × Plan matrix with colour-coded C / R / N / ? cells; filterable by drug, status, benefit side, and PA requirement |
+| **Ask AI** | Natural language Q&A; every response shows routing tier label, cost badge, and cache-hit indicator |
 | **Semantic Cache** | SHA256-keyed 7-day cache; invalidated on new ingest; cache hits returned at $0.00 |
-| **Compare** | Drug across plans (benefit side first column, completeness badge); two-plan field-level diff |
-| **Change Tracker** | Field-level change log across quarters with old → new values |
-| **Formulary Book Support** | 240-page formulary books compressed to drug-relevant lines before extraction (prevents token bloat) |
+| **Compare** | Drug across plans (benefit side first column, completeness badge); two-plan field-level diff with benefit side highlight |
+| **Change Tracker** | Field-level change log across quarters with old → new values; filterable by plan and change type |
+| **Formulary Book Support** | Large formulary books compressed to drug-relevant lines before extraction (prevents token bloat) |
+| **Analyst Corrections** | Review and apply AI extraction corrections from the MLOps dashboard |
 
 ---
 
@@ -112,7 +124,9 @@ Five focused diagrams are in `architecture.puml` (render at https://plantuml.com
 
 **System flow:**
 ```
-Streamlit UI (8501) → FastAPI (8000)
+Browser → FastAPI (8000)
+  ├─ GET /           → serves mockup/index.html (HTML/JS frontend)
+  │
   ├─ Ingest:  pdfplumber → formulary truncation → Claude extraction (v2.0 prompt)
   │           → ChromaDB chunks + SQLite structured write
   │           → Hook A (extraction quality) · Hook B (drift) · Hook C (cache invalidate)
@@ -124,6 +138,46 @@ Streamlit UI (8501) → FastAPI (8000)
   │
   └─ MLOps:   Prompt Registry · LLM Observability · Quality Scores
               Drift Events · Corrections · Cache · Re-extraction · A/B Tests
+
+Streamlit (8501) → same FastAPI backend (alternative interface)
+```
+
+---
+
+## Frontend Structure
+
+Two parallel frontends, both backed by the same FastAPI API:
+
+### HTML/JS Frontend (`mockup/`)
+Served by FastAPI at `http://localhost:8000/`. Uses native `fetch()` to call `/api/v1/*` directly. No extra server needed.
+
+```
+mockup/
+  index.html       ← full app (CSS + JS in one file)
+  mock_server.py   ← standalone mock server for UI development (no backend needed)
+```
+
+Run the mock server for frontend-only development:
+```bash
+python mockup/mock_server.py
+# Open http://localhost:8000 — all screens work with realistic stub data
+```
+
+### Streamlit Frontend (`frontend/`)
+Modular tab structure — each tab is its own file:
+
+```
+frontend/
+  app.py              ← entry point (sidebar + tab layout only, ~70 lines)
+  tabs/
+    upload.py         ← Upload & Documents queue
+    ask.py            ← Ask AI + structured hits + sources
+    coverage.py       ← Coverage Grid + filters + export
+    compare.py        ← Drug compare + two-plan diff
+    changes.py        ← Change Tracker + export
+    mlops.py          ← All 8 MLOps sections
+  utils/
+    api_client.py     ← HTTP client wrapper for FastAPI
 ```
 
 ---
@@ -155,13 +209,15 @@ Streamlit UI (8501) → FastAPI (8000)
 
 | Layer | Technology |
 |---|---|
-| **Backend** | FastAPI + Python 3.11 |
+| **Backend** | FastAPI + Python 3.13 |
 | **AI — default** | Claude claude-sonnet-4-6 (Anthropic SDK) |
 | **AI — free tier** | Gemini 2.5 Pro via Google AI Studio (see below) |
 | **Vector DB** | ChromaDB · `sentence-transformers/all-MiniLM-L6-v2` · 384-dim cosine |
 | **SQL DB** | SQLite via SQLAlchemy ORM |
 | **PDF Parsing** | pdfplumber |
-| **Frontend** | Streamlit |
+| **Streamlit UI** | Streamlit 1.43+ |
+| **HTML/JS UI** | Vanilla JS + Fetch API (no framework, no build step) |
+| **Virtual Env** | `.venv/` (Python 3.13, created with `python -m venv .venv`) |
 
 ---
 
@@ -239,16 +295,3 @@ python scripts/ingest_real_data.py
 ```
 
 The script calls `/ingest/upload` then `/ingest/process/{id}` for each document and reports `drugs_extracted`, `policies_created`, `changes_detected` per file.
-
----
-
-## UI Mockup
-
-A static HTML mockup of all 6 screens is at `mockup/index.html`. Open it in any browser to click through:
-
-- **Ask AI** — conversational query with tier badge + cost + source evidence
-- **Compare** — drug across plans or two-plan diff with benefit side and completeness badges
-- **Coverage Grid** — drug × plan matrix with C/R/N/? colour cells
-- **Change Tracker** — field-level change log across quarters
-- **Upload** — document queue with real-time extraction quality panel
-- **MLOps Dashboard** — cost, routing tiers, drift alerts, prompt registry, corrections
