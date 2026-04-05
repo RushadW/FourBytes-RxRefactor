@@ -53,15 +53,16 @@ app.include_router(compare.router, prefix="/api/v1")
 app.include_router(policies.router, prefix="/api/v1")
 app.include_router(mlops.router, prefix="/api/v1")
 
-# Serve the HTML mockup as the main UI
-_MOCKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mockup")
-if os.path.isdir(_MOCKUP_DIR):
-    app.mount("/static", StaticFiles(directory=_MOCKUP_DIR), name="static")
+# Serve the production HTML frontend
+_ROOT = os.path.dirname(os.path.dirname(__file__))
+_FRONTEND_DIR = os.path.join(_ROOT, "frontend_html")
+if os.path.isdir(_FRONTEND_DIR):
+    app.mount("/static", StaticFiles(directory=_FRONTEND_DIR), name="static")
 
 
 @app.get("/")
 def root():
-    index = os.path.join(_MOCKUP_DIR, "index.html")
+    index = os.path.join(_FRONTEND_DIR, "index.html")
     if os.path.isfile(index):
         return FileResponse(index, media_type="text/html")
     return {

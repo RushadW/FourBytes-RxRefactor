@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from frontend.utils import api_client
+from frontend.utils.styles import coverage_badge, benefit_badge, dc_badge, badge
 
 
 def render(plans, plan_options, selected_plan_ids):
@@ -30,36 +31,77 @@ def render(plans, plan_options, selected_plan_ids):
 
                         rows = result["comparisons"]
 
-                        # Summary table — Benefit Side is first column
-                        df = pd.DataFrame([{
-                            "Benefit Side": r.get("benefit_side", "unknown") or "unknown",
-                            "Plan": r["plan_name"],
-                            "Coverage": r["coverage_status"],
-                            "PA Required": "Yes" if r["requires_prior_auth"] else "No",
-                            "Step Therapy": "Yes" if r["requires_step_therapy"] else "No",
-                            "Tier": r.get("tier", ""),
-                            "Qty Limit": r.get("quantity_limit", ""),
-                            "Data": r.get("data_completeness", "low") or "low",
-                        } for r in rows])
+                        # ── Mockup-style compare grid ──────────────────────
+                        n = len(rows)
+                        col_w = f"180px repeat({n}, 1fr)"
 
-                        def highlight_cov(val):
-                            if val == "covered": return "background-color: #d4edda"
-                            if val == "not_covered": return "background-color: #f8d7da"
-                            if val == "covered_with_restrictions": return "background-color: #fff3cd"
-                            return ""
+                        def _section(title):
+                            return (
+                                f'<div style="grid-column:1/-1;padding:7px 16px;'
+                                f'font-size:11px;font-weight:700;text-transform:uppercase;'
+                                f'letter-spacing:.06em;color:#1d4ed8;background:#eff6ff;'
+                                f'border-bottom:1px solid #bfdbfe;">{title}</div>'
+                            )
 
-                        def highlight_benefit(val):
-                            if val == "medical":  return "background-color: #e9d5ff; color: #6b21a8"
-                            if val == "pharmacy": return "background-color: #dbeafe; color: #1d4ed8"
-                            if val == "both":     return "background-color: #d4edda; color: #155724"
-                            return ""
+                        def _row(label, cells_html):
+                            cells = "".join(
+                                f'<div style="padding:10px 16px;font-size:13px;color:#334155;'
+                                f'border-right:1px solid #f1f5f9;">{c}</div>'
+                                for c in cells_html
+                            )
+                            return (
+                                f'<div style="display:grid;grid-template-columns:{col_w};'
+                                f'border-bottom:1px solid #f1f5f9;">'
+                                f'<div style="padding:10px 16px;font-size:11.5px;font-weight:600;'
+                                f'color:#64748b;text-transform:uppercase;letter-spacing:.04em;">'
+                                f'{label}</div>{cells}</div>'
+                            )
 
-                        st.dataframe(
-                            df.style
-                              .map(highlight_cov,     subset=["Coverage"])
-                              .map(highlight_benefit, subset=["Benefit Side"]),
-                            use_container_width=True, hide_index=True
+                        headers = "".join(
+                            f'<div style="padding:13px 16px;font-size:13px;font-weight:700;'
+                            f'color:#0f172a;border-right:1px solid #e2e8f0;">'
+                            f'{r["plan_name"]}<div style="font-size:11px;color:#94a3b8;'
+                            f'font-weight:400;margin-top:2px;">'
+                            f'{r.get("payer_name","")}</div></div>'
+                            for r in rows
                         )
+
+                        grid = (
+                            f'<div style="background:#fff;border:1px solid #e2e8f0;'
+                            f'border-radius:8px;overflow:hidden;'
+                            f'box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;">'
+                            f'<div style="display:grid;grid-template-columns:{col_w};'
+                            f'border-bottom:2px solid #e2e8f0;">'
+                            f'<div style="padding:13px 16px;font-size:12px;font-weight:600;'
+                            f'color:#64748b;">Field</div>{headers}</div>'
+                            + _section("Coverage")
+                            + _row("Benefit Side",  [benefit_badge(r.get("benefit_side","")) for r in rows])
+                            + _row("Coverage",      [coverage_badge(r["coverage_status"])   for r in rows])
+                            + _row("Tier",          [r.get("tier") or "—"                   for r in rows])
+                            + _row("Data Quality",  [dc_badge(r.get("data_completeness","low")) for r in rows])
+                            + _section("Prior Authorization")
+                            + _row("PA Required",
+                                   ['<span style="color:#15803d;font-weight:600;">✓ Yes</span>'
+                                    if r["requires_prior_auth"] else
+                                    '<span style="color:#94a3b8;">✗ No</span>'
+                                    for r in rows])
+                            + _section("Step Therapy")
+                            + _row("Step Tx Required",
+                                   ['<span style="color:#15803d;font-weight:600;">✓ Yes</span>'
+                                    if r["requires_step_therapy"] else
+                                    '<span style="color:#94a3b8;">✗ No</span>'
+                                    for r in rows])
+                            + _row("Required Agents",
+                                   ["<br>".join(
+                                       f'<span style="font-size:12px;">• {d}</span>'
+                                       for d in (r.get("step_therapy_drugs") or [])
+                                   ) or '<span style="color:#94a3b8;">—</span>'
+                                    for r in rows])
+                            + _section("Quantity Limits")
+                            + _row("Qty Limit", [r.get("quantity_limit") or "—" for r in rows])
+                            + "</div>"
+                        )
+                        st.markdown(grid, unsafe_allow_html=True)
 
                         # Detailed PA criteria per plan — with data completeness badge
                         _dc_badge = {"high": "🟢 High", "medium": "🟡 Medium", "low": "🔴 Low"}

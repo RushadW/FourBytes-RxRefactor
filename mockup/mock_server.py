@@ -5,8 +5,9 @@ Serves index.html + returns realistic stub JSON for every /api/v1/* endpoint.
 No database, no Anthropic key, no ChromaDB needed.
 
 Usage:
-    python mockup/mock_server.py          # default port 8000
-    python mockup/mock_server.py 9000     # custom port
+    python mockup/mock_server.py                   # serves mockup/index.html on port 8000
+    python mockup/mock_server.py 9000              # custom port
+    python mockup/mock_server.py 9000 frontend_html  # serve a different directory
 """
 
 import json
@@ -16,8 +17,10 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
-HERE = os.path.dirname(os.path.abspath(__file__))
+PORT  = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DIR  = sys.argv[2] if len(sys.argv) > 2 else "mockup"
+HERE  = os.path.join(_ROOT, _DIR)
 INDEX = os.path.join(HERE, "index.html")
 
 # ── Stub data ──────────────────────────────────────────────────────────────────

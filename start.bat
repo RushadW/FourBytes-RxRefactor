@@ -1,37 +1,29 @@
 @echo off
-echo Starting AntonRx Medical Benefit Drug Policy Tracker...
+echo Starting AntonRx...
 echo.
 
-REM Use venv if it exists, otherwise fall back to system Python
-if exist ".venv\Scripts\python.exe" (
-    set PYTHON=.venv\Scripts\python.exe
+if exist ".venv\Scripts\uvicorn.exe" (
     set UVICORN=.venv\Scripts\uvicorn.exe
-    set STREAMLIT=.venv\Scripts\streamlit.exe
-    echo Using venv: .venv\
+    set PYTHON=.venv\Scripts\python.exe
+    echo Using .venv
 ) else (
-    set PYTHON=python
     set UVICORN=uvicorn
-    set STREAMLIT=streamlit
+    set PYTHON=python
     echo Using system Python
 )
 
-echo.
-
-REM Start FastAPI backend (serves UI + API at port 8000)
-start "AntonRx Backend" cmd /k "%UVICORN% backend.main:app --reload --port 8000"
-
-REM Wait for backend to start
-timeout /t 3 /nobreak > nul
-
-REM Start Streamlit frontend
-start "AntonRx Streamlit" cmd /k "%STREAMLIT% run frontend/app.py --server.port 8501 --server.headless true"
+REM Start FastAPI — serves frontend_html/index.html at / and API at /api/v1/*
+start "AntonRx" cmd /k "%UVICORN% backend.main:app --reload --port 8000"
 
 echo.
-echo  App (mockup UI):   http://localhost:8000
-echo  Streamlit UI:      http://localhost:8501
-echo  API Docs:          http://localhost:8000/docs
+echo  App:      http://localhost:8000
+echo  API Docs: http://localhost:8000/docs
 echo.
-echo To load demo data, open a new terminal and run:
-echo   %PYTHON% scripts/seed_demo.py
+echo  Mockup sandbox (no backend needed):
+echo    %PYTHON% mockup/mock_server.py 8001
+echo    then open http://localhost:8001
+echo.
+echo  Promote mockup to live frontend:
+echo    promote_frontend.bat
 echo.
 pause

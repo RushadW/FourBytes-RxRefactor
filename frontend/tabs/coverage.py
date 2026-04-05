@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from frontend.utils import api_client
+from frontend.utils.styles import coverage_badge, benefit_badge, dc_badge
 
 
 def render(plans, plan_options, selected_plan_ids):
@@ -63,26 +64,47 @@ def render(plans, plan_options, selected_plan_ids):
             if benefit_side_filter != "All":
                 df = df[df["Benefit Side"] == benefit_side_filter]
 
-            def highlight_coverage(val):
-                if val == "covered":                    return "background-color: #d4edda; color: #155724"
-                if val == "not_covered":                return "background-color: #f8d7da; color: #721c24"
-                if val == "covered_with_restrictions":  return "background-color: #fff3cd; color: #856404"
-                return ""
+            # Render as HTML table with mockup badge styling
+            st.markdown(
+                f'<p style="font-size:12px;color:#64748b;margin-bottom:8px;">'
+                f'<strong>{len(df)}</strong> records</p>',
+                unsafe_allow_html=True,
+            )
 
-            def highlight_benefit(val):
-                if val == "medical":  return "background-color: #e9d5ff; color: #6b21a8"
-                if val == "pharmacy": return "background-color: #dbeafe; color: #1d4ed8"
-                if val == "both":     return "background-color: #d4edda; color: #155724"
-                return ""
+            header_cells = "".join(
+                f'<th style="text-align:left;padding:10px 14px;font-size:11.5px;'
+                f'font-weight:600;text-transform:uppercase;letter-spacing:.05em;'
+                f'color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0;">'
+                f'{col}</th>'
+                for col in ["Plan", "Drug (Generic)", "Brand", "Benefit", "Coverage",
+                             "PA", "Step Tx", "Tier", "Qty Limit", "Data", "Quarter"]
+            )
 
-            st.caption(f"**{len(df)} records**")
-            st.dataframe(
-                df.style
-                  .map(highlight_coverage, subset=["Coverage"])
-                  .map(highlight_benefit,  subset=["Benefit Side"]),
-                use_container_width=True,
-                hide_index=True,
-                height=500,
+            rows_html = ""
+            for _, row in df.iterrows():
+                pa_c  = "#15803d" if row["PA Req"] == "Yes" else "#94a3b8"
+                st_c  = "#15803d" if row["Step Therapy"] == "Yes" else "#94a3b8"
+                rows_html += f"""<tr style="border-bottom:1px solid #f1f5f9;">
+  <td style="padding:10px 14px;font-weight:500;color:#0f172a;font-size:13px;">{row['Plan']}</td>
+  <td style="padding:10px 14px;color:#334155;font-size:13px;">{row['Drug (Generic)']}</td>
+  <td style="padding:10px 14px;color:#64748b;font-size:12px;">{row['Brand']}</td>
+  <td style="padding:10px 14px;">{benefit_badge(row['Benefit Side'])}</td>
+  <td style="padding:10px 14px;">{coverage_badge(row['Coverage'])}</td>
+  <td style="padding:10px 14px;font-weight:600;font-size:13px;color:{pa_c};">{row['PA Req']}</td>
+  <td style="padding:10px 14px;font-weight:600;font-size:13px;color:{st_c};">{row['Step Therapy']}</td>
+  <td style="padding:10px 14px;color:#334155;font-size:13px;">{row['Tier'] or '—'}</td>
+  <td style="padding:10px 14px;color:#334155;font-size:12px;">{row['Qty Limit'] or '—'}</td>
+  <td style="padding:10px 14px;">{dc_badge(row['Data'])}</td>
+  <td style="padding:10px 14px;color:#64748b;font-size:12px;">{row['Quarter']}</td>
+</tr>"""
+
+            st.markdown(
+                f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;'
+                f'overflow-x:auto;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:12px;">'
+                f'<table style="width:100%;border-collapse:collapse;">'
+                f'<thead><tr>{header_cells}</tr></thead>'
+                f'<tbody>{rows_html}</tbody></table></div>',
+                unsafe_allow_html=True,
             )
 
             csv = df.to_csv(index=False)
