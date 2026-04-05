@@ -34,9 +34,22 @@ def process_document(db: Session, document_id: int) -> dict:
             raise ValueError("No text could be extracted from the document.")
 
         # Step 2: Extract structured data with Claude (loads active prompt from DB)
-        batches = pdf_parser.batch_text_for_extraction(full_text)
+        # For formulary books, get_relevant_text narrows to drug-relevant lines first
+        doc_type = doc.doc_type or ""
+        drug_hint = doc.drug_hint or ""
+        benefit_side_hint = doc.benefit_side_hint or "unknown"
+        plan = crud.get_plan(db, doc.plan_id)
+        payer_name = plan.payer_name if plan else ""
+
+        relevant_text = claude_extractor.get_relevant_text(full_text, drug_hint, doc_type)
+        batches = pdf_parser.batch_text_for_extraction(relevant_text)
         extraction = claude_extractor.extract_from_batches(
-            batches, document_id=document_id
+            batches,
+            document_id=document_id,
+            payer=payer_name,
+            drug=drug_hint,
+            doc_type=doc_type,
+            benefit_side=benefit_side_hint,
         )
         prompt_version_id = extraction.get("_prompt_version_id")
 
@@ -47,7 +60,6 @@ def process_document(db: Session, document_id: int) -> dict:
         final_status = "complete" if quality["pass"] else "low_quality"
 
         # Step 3: Embed + store chunks in ChromaDB
-        plan = crud.get_plan(db, doc.plan_id)
         embeddings.delete_chunks_for_document(document_id)
         crud.delete_chunks_for_document(db, document_id)
 
@@ -100,13 +112,16 @@ def process_document(db: Session, document_id: int) -> dict:
                 "coverage_status": drug_data.get("coverage_status", "covered_with_restrictions"),
                 "tier": drug_data.get("tier"),
                 "quantity_limit": drug_data.get("quantity_limit"),
-                "requires_prior_auth": bool(drug_data.get("requires_prior_auth", False)),
-                "requires_step_therapy": bool(drug_data.get("requires_step_therapy", False)),
+                "requires_prior_auth": bool(drug_data.get("requires_prior_auth") or drug_data.get("prior_auth_required", False)),
+                "requires_step_therapy": bool(drug_data.get("requires_step_therapy") or drug_data.get("step_therapy_required", False)),
                 "age_restriction": drug_data.get("age_restriction"),
                 "diagnosis_restriction": drug_data.get("diagnosis_restriction"),
                 "site_of_care": drug_data.get("site_of_care"),
                 "notes": drug_data.get("notes"),
                 "extraction_prompt_version_id": prompt_version_id,
+                "benefit_side": drug_data.get("benefit_side", "unknown") or "unknown",
+                "data_completeness": drug_data.get("data_completeness", "low") or "low",
+                "benefit_side_note": drug_data.get("benefit_side_note"),
             }
 
             # Step 5: Change detection
@@ -135,6 +150,14 @@ def process_document(db: Session, document_id: int) -> dict:
 
             crud.add_prior_auth_criteria(db, policy.id, drug_data.get("prior_auth_criteria", []))
             crud.add_step_therapy(db, policy.id, drug_data.get("step_therapy", []))
+
+            ql = drug_data.get("quantity_limits")
+            if ql and isinstance(ql, dict):
+                crud.upsert_quantity_limit(db, policy.id, ql)
+
+            sti = drug_data.get("step_therapy_by_indication")
+            if sti and isinstance(sti, dict):
+                crud.upsert_step_therapy_by_indication(db, policy.id, sti)
 
         # MLOps Hook B: Drift detection
         new_pa_rate = pa_count / drugs_extracted if drugs_extracted else 0

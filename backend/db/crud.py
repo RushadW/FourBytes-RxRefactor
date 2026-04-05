@@ -5,7 +5,8 @@ from sqlalchemy import or_
 
 from backend.models.orm import (
     HealthPlan, PolicyDocument, Drug, CoveragePolicy,
-    PriorAuthCriterion, StepTherapyRequirement, PolicyChangeLog, DocumentChunk
+    PriorAuthCriterion, StepTherapyRequirement, PolicyChangeLog, DocumentChunk,
+    QuantityLimit, StepTherapyByIndication
 )
 
 
@@ -32,10 +33,13 @@ def get_plan(db: Session, plan_id: int) -> Optional[HealthPlan]:
 # ── Policy Documents ──────────────────────────────────────────────────────────
 
 def create_document(db: Session, plan_id: int, filename: str, file_path: str,
-                    file_hash: str, quarter: str = None, version: int = 1) -> PolicyDocument:
+                    file_hash: str, quarter: str = None, version: int = 1,
+                    doc_type: str = None, drug_hint: str = None,
+                    benefit_side_hint: str = None) -> PolicyDocument:
     doc = PolicyDocument(
         plan_id=plan_id, filename=filename, file_path=file_path,
-        file_hash=file_hash, quarter=quarter, version=version, status="pending"
+        file_hash=file_hash, quarter=quarter, version=version, status="pending",
+        doc_type=doc_type, drug_hint=drug_hint, benefit_side_hint=benefit_side_hint,
     )
     db.add(doc)
     db.commit()
@@ -128,15 +132,15 @@ def upsert_coverage_policy(db: Session, plan_id: int, drug_id: int, document_id:
         CoveragePolicy.document_id == document_id,
     ).first()
 
+    _EXCLUDE = {"prior_auth_criteria", "step_therapy", "quantity_limits", "step_therapy_by_indication"}
     is_new = existing is None
     if existing:
         for k, v in coverage_data.items():
-            if k not in ("prior_auth_criteria", "step_therapy"):
+            if k not in _EXCLUDE:
                 setattr(existing, k, v)
         policy = existing
     else:
-        policy_fields = {k: v for k, v in coverage_data.items()
-                        if k not in ("prior_auth_criteria", "step_therapy")}
+        policy_fields = {k: v for k, v in coverage_data.items() if k not in _EXCLUDE}
         policy = CoveragePolicy(plan_id=plan_id, drug_id=drug_id,
                                 document_id=document_id, **policy_fields)
         db.add(policy)
@@ -170,6 +174,51 @@ def add_step_therapy(db: Session, coverage_policy_id: int, steps: List[dict]):
             required_drug=step.get("required_drug", ""),
             minimum_duration=step.get("minimum_duration"),
             failure_criteria=step.get("failure_criteria"),
+        ))
+    db.commit()
+
+
+def upsert_quantity_limit(db: Session, coverage_policy_id: int, ql_data: dict):
+    """Delete-and-replace quantity limit record for this policy."""
+    db.query(QuantityLimit).filter(
+        QuantityLimit.coverage_policy_id == coverage_policy_id
+    ).delete()
+    if not ql_data:
+        db.commit()
+        return
+    db.add(QuantityLimit(
+        coverage_policy_id=coverage_policy_id,
+        retail_28_day=ql_data.get("retail_28_day"),
+        home_delivery_84_day=ql_data.get("home_delivery_84_day"),
+        weight_based=ql_data.get("weight_based"),
+        indication_specific=ql_data.get("indication_specific"),
+        source_page=ql_data.get("source_page"),
+        source_text=ql_data.get("source_text"),
+    ))
+    db.commit()
+
+
+def upsert_step_therapy_by_indication(db: Session, coverage_policy_id: int, sti_data: dict):
+    """Delete-and-replace all indication-level step therapy rows for this policy."""
+    import json as _json
+    db.query(StepTherapyByIndication).filter(
+        StepTherapyByIndication.coverage_policy_id == coverage_policy_id
+    ).delete()
+    if not sti_data:
+        db.commit()
+        return
+    for code, entry in sti_data.items():
+        if not isinstance(entry, dict):
+            continue
+        db.add(StepTherapyByIndication(
+            coverage_policy_id=coverage_policy_id,
+            indication_code=code,
+            required=entry.get("required"),
+            agents=_json.dumps(entry.get("agents") or []),
+            minimum_duration=entry.get("minimum_duration"),
+            exceptions=_json.dumps(entry.get("exceptions") or []),
+            source_page=entry.get("source_page"),
+            source_text=entry.get("source_text"),
         ))
     db.commit()
 
@@ -224,6 +273,9 @@ def get_coverage_for_drug(db: Session, drug_ids: List[int],
             "quarter": doc.quarter,
             "prior_auth_criteria": pa_criteria,
             "step_therapy_drugs": step_drugs,
+            "benefit_side": cp.benefit_side,
+            "data_completeness": cp.data_completeness,
+            "benefit_side_note": cp.benefit_side_note,
         })
     return result
 
@@ -257,6 +309,9 @@ def get_all_coverage(db: Session, plan_ids: List[int] = None) -> List[dict]:
             "diagnosis_restriction": cp.diagnosis_restriction,
             "notes": cp.notes,
             "quarter": doc.quarter,
+            "benefit_side": cp.benefit_side,
+            "data_completeness": cp.data_completeness,
+            "benefit_side_note": cp.benefit_side_note,
         })
     return result
 

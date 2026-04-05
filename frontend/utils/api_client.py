@@ -49,7 +49,9 @@ def delete_document(document_id: int) -> Dict:
 # Ingestion
 def upload_document(file_bytes: bytes, filename: str, plan_name: str,
                     payer_name: str, plan_type: str = None,
-                    effective_date: str = None, quarter: str = None) -> Dict:
+                    effective_date: str = None, quarter: str = None,
+                    doc_type: str = None, drug: str = None,
+                    benefit_side: str = None) -> Dict:
     files = {"file": (filename, file_bytes, "application/pdf")}
     data = {"plan_name": plan_name, "payer_name": payer_name}
     if plan_type:
@@ -58,6 +60,12 @@ def upload_document(file_bytes: bytes, filename: str, plan_name: str,
         data["effective_date"] = effective_date
     if quarter:
         data["quarter"] = quarter
+    if doc_type:
+        data["doc_type"] = doc_type
+    if drug:
+        data["drug"] = drug
+    if benefit_side:
+        data["benefit_side"] = benefit_side
     return _post("/ingest/upload", files=files, data=data)
 
 

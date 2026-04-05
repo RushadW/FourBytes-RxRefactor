@@ -96,6 +96,9 @@ class CoveragePolicySummary(BaseModel):
     diagnosis_restriction: Optional[str]
     notes: Optional[str]
     quarter: Optional[str]
+    benefit_side: Optional[str] = "unknown"
+    data_completeness: Optional[str] = "low"
+    benefit_side_note: Optional[str] = None
 
 
 class CoveragePolicyDetail(CoveragePolicySummary):
@@ -124,6 +127,8 @@ class AskResponse(BaseModel):
     structured_hits: List[CoveragePolicySummary]
     cache_hit: bool = False
     rag_score_id: Optional[int] = None
+    routing_tier: str = "tier_3_rag"
+    source_cost: str = "$0.00"
 
 
 # ── Compare ────────────────────────────────────────────────────────────────────
@@ -140,6 +145,9 @@ class DrugComparisonRow(BaseModel):
     quantity_limit: Optional[str]
     age_restriction: Optional[str]
     notes: Optional[str]
+    benefit_side: Optional[str] = "unknown"
+    data_completeness: Optional[str] = "low"
+    benefit_side_note: Optional[str] = None
 
 
 class DrugComparisonResponse(BaseModel):

@@ -38,6 +38,10 @@ class PolicyDocument(Base):
     error_message = Column(Text, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     processed_at = Column(DateTime, nullable=True)
+    # Doc-level context for domain-specific extraction
+    doc_type = Column(String, nullable=True)        # clinical_policy|dqm_policy|formulary_book
+    drug_hint = Column(String, nullable=True)       # primary drug focus (e.g. "adalimumab")
+    benefit_side_hint = Column(String, nullable=True)  # medical|pharmacy|unknown
     # MLOps: link to quality score
     extraction_score_id = Column(Integer, ForeignKey("extraction_quality_scores.id"), nullable=True)
 
@@ -79,6 +83,9 @@ class CoveragePolicy(Base):
     # MLOps: track which prompt version produced this extraction
     extraction_prompt_version_id = Column(Integer, ForeignKey("prompt_versions.id"), nullable=True)
     has_analyst_correction = Column(Boolean, default=False)
+    benefit_side = Column(String, default="unknown")
+    data_completeness = Column(String, default="low")
+    benefit_side_note = Column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("plan_id", "drug_id", "document_id"),
@@ -90,6 +97,8 @@ class CoveragePolicy(Base):
     prior_auth_criteria = relationship("PriorAuthCriterion", back_populates="coverage_policy", cascade="all, delete-orphan")
     step_therapy_requirements = relationship("StepTherapyRequirement", back_populates="coverage_policy", cascade="all, delete-orphan")
     analyst_corrections = relationship("AnalystCorrection", back_populates="coverage_policy")
+    quantity_limits = relationship("QuantityLimit", back_populates="coverage_policy", cascade="all, delete-orphan")
+    step_therapy_by_indication = relationship("StepTherapyByIndication", back_populates="coverage_policy", cascade="all, delete-orphan")
 
 
 class PriorAuthCriterion(Base):
@@ -115,6 +124,37 @@ class StepTherapyRequirement(Base):
     failure_criteria = Column(String, nullable=True)
 
     coverage_policy = relationship("CoveragePolicy", back_populates="step_therapy_requirements")
+
+
+class QuantityLimit(Base):
+    __tablename__ = "quantity_limits"
+
+    id = Column(Integer, primary_key=True)
+    coverage_policy_id = Column(Integer, ForeignKey("coverage_policies.id"), nullable=False)
+    retail_28_day = Column(String, nullable=True)
+    home_delivery_84_day = Column(String, nullable=True)
+    weight_based = Column(Boolean, nullable=True)
+    indication_specific = Column(String, nullable=True)
+    source_page = Column(Integer, nullable=True)
+    source_text = Column(Text, nullable=True)
+
+    coverage_policy = relationship("CoveragePolicy", back_populates="quantity_limits")
+
+
+class StepTherapyByIndication(Base):
+    __tablename__ = "step_therapy_by_indication"
+
+    id = Column(Integer, primary_key=True)
+    coverage_policy_id = Column(Integer, ForeignKey("coverage_policies.id"), nullable=False)
+    indication_code = Column(String, nullable=False)   # RA/AS/CD/UC/PS/PsA/HS/Uveitis
+    required = Column(Boolean, nullable=True)
+    agents = Column(Text, nullable=True)               # JSON-serialized list
+    minimum_duration = Column(String, nullable=True)
+    exceptions = Column(Text, nullable=True)           # JSON-serialized list
+    source_page = Column(Integer, nullable=True)
+    source_text = Column(Text, nullable=True)
+
+    coverage_policy = relationship("CoveragePolicy", back_populates="step_therapy_by_indication")
 
 
 class PolicyChangeLog(Base):

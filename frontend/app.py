@@ -74,6 +74,9 @@ with tab_upload:
         plan_type = st.selectbox("Plan Type", ["Commercial", "Medicare Advantage", "Medicaid", "Other"])
         quarter = st.text_input("Quarter", placeholder="e.g. Q1 2025")
         effective_date = st.date_input("Effective Date", value=None)
+        doc_type = st.selectbox("Document Type", ["clinical_policy", "dqm_policy", "formulary_book", "other"])
+        drug_hint = st.text_input("Primary Drug Focus", placeholder="e.g. adalimumab (optional)")
+        benefit_side_upload = st.selectbox("Benefit Side", ["unknown", "medical", "pharmacy", "both"])
 
     if uploaded_file and plan_name and payer_name:
         if st.button("🚀 Upload & Process", type="primary", use_container_width=True):
@@ -87,6 +90,9 @@ with tab_upload:
                         plan_type=plan_type,
                         effective_date=str(effective_date) if effective_date else None,
                         quarter=quarter or None,
+                        doc_type=doc_type,
+                        drug=drug_hint or None,
+                        benefit_side=benefit_side_upload,
                     )
                     doc_id = upload_resp["document_id"]
                     st.success(f"Uploaded! Document ID: {doc_id}")
@@ -190,6 +196,15 @@ with tab_ask:
                 )
                 st.markdown("### Answer")
                 st.markdown(result["answer"])
+
+                tier = result.get("routing_tier", "tier_3_rag")
+                cost = result.get("source_cost", "")
+                tier_labels = {
+                    "tier_1_structured": "🗃 Tier 1 — answered from structured DB (no LLM call)",
+                    "tier_2_synthesis": "⚡ Tier 2 — synthesized from structured data",
+                    "tier_3_rag": "🔍 Tier 3 — full RAG retrieval",
+                }
+                st.caption(f"{tier_labels.get(tier, tier)}  |  Cost: {cost}")
 
                 if result.get("structured_hits"):
                     st.markdown("### Matching Coverage Records")
@@ -321,8 +336,9 @@ with tab_compare:
 
                         rows = result["comparisons"]
 
-                        # Summary table
+                        # Summary table — Benefit Side is first column
                         df = pd.DataFrame([{
+                            "Benefit Side": r.get("benefit_side", "unknown") or "unknown",
                             "Plan": r["plan_name"],
                             "Coverage": r["coverage_status"],
                             "PA Required": "Yes" if r["requires_prior_auth"] else "No",
@@ -344,12 +360,17 @@ with tab_compare:
                             use_container_width=True, hide_index=True
                         )
 
-                        # Detailed PA criteria per plan
+                        # Detailed PA criteria per plan — with data completeness badge
+                        _dc_badge = {"high": "🟢 High", "medium": "🟡 Medium", "low": "🔴 Low"}
                         st.subheader("Prior Auth Criteria by Plan")
                         cols = st.columns(min(len(rows), 3))
                         for i, row in enumerate(rows):
                             with cols[i % 3]:
-                                st.markdown(f"**{row['plan_name']}**")
+                                dc = row.get("data_completeness", "low") or "low"
+                                badge = _dc_badge.get(dc, "🔴 Low")
+                                st.markdown(f"**{row['plan_name']}** {badge}")
+                                if row.get("benefit_side_note"):
+                                    st.warning(row["benefit_side_note"])
                                 if row.get("prior_auth_criteria"):
                                     for j, crit in enumerate(row["prior_auth_criteria"]):
                                         st.caption(f"{j+1}. {crit}")
@@ -395,7 +416,16 @@ with tab_compare:
                                 plan_a_name: d["plan_a_value"],
                                 plan_b_name: d["plan_b_value"],
                             } for d in result["differences"]])
-                            st.dataframe(df_diff, use_container_width=True, hide_index=True)
+
+                            def _highlight_benefit_side(row):
+                                if row["Field"] == "Benefit Side":
+                                    return ["background-color: #ffe0b2"] * len(row)
+                                return [""] * len(row)
+
+                            st.dataframe(
+                                df_diff.style.apply(_highlight_benefit_side, axis=1),
+                                use_container_width=True, hide_index=True
+                            )
 
                         col_a, col_b = st.columns(2)
                         with col_a:

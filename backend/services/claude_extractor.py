@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 from typing import List, Dict, Any, Optional
 
 import anthropic
@@ -82,16 +83,42 @@ def _parse_json(raw: str) -> Dict:
     return json.loads(raw)
 
 
+def get_relevant_text(full_text: str, drug: str, doc_type: str) -> str:
+    """For formulary books, extract only lines near the drug name to avoid token bloat."""
+    if doc_type == "formulary_book" and drug:
+        lines = full_text.split('\n')
+        drug_lower = drug.lower()
+        relevant = []
+        for i, line in enumerate(lines):
+            if drug_lower in line.lower():
+                start = max(0, i - 2)
+                end = min(len(lines), i + 5)
+                relevant.extend(lines[start:end])
+        return '\n'.join(relevant) if relevant else full_text[:3000]
+    return full_text
+
+
 def extract_drugs_from_text(
     document_text: str,
     document_id: Optional[int] = None,
     prompt_version_id: Optional[int] = None,
     system_prompt: str = None,
     user_template: str = None,
+    payer: str = "",
+    drug: str = "",
+    doc_type: str = "",
+    benefit_side: str = "unknown",
 ) -> Dict[str, Any]:
     sys_p = system_prompt or _DEFAULT_SYSTEM
     user_t = user_template or _DEFAULT_USER_TEMPLATE
-    prompt = user_t.format(document_text=document_text)
+    ctx = defaultdict(str, {
+        "document_text": document_text,
+        "payer": payer,
+        "drug": drug,
+        "doc_type": doc_type,
+        "benefit_side": benefit_side,
+    })
+    prompt = user_t.format_map(ctx)
 
     response = tracked_call(
         client,
@@ -129,6 +156,10 @@ def extract_from_batches(
     batches: List[str],
     document_id: Optional[int] = None,
     prompt_override: Dict = None,
+    payer: str = "",
+    drug: str = "",
+    doc_type: str = "",
+    benefit_side: str = "unknown",
 ) -> Dict[str, Any]:
     """Run extraction on multiple text batches and merge results."""
     system_prompt, user_template, version_id = _get_prompts(prompt_override)
@@ -144,6 +175,10 @@ def extract_from_batches(
                 prompt_version_id=version_id,
                 system_prompt=system_prompt,
                 user_template=user_template,
+                payer=payer,
+                drug=drug,
+                doc_type=doc_type,
+                benefit_side=benefit_side,
             )
         except Exception as e:
             print(f"[extractor] Batch {i} failed: {e}")

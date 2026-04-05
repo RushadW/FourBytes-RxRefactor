@@ -40,6 +40,9 @@ def compare_drug(
             quantity_limit=row.get("quantity_limit"),
             age_restriction=row.get("age_restriction"),
             notes=row.get("notes"),
+            benefit_side=row.get("benefit_side", "unknown"),
+            data_completeness=row.get("data_completeness", "low"),
+            benefit_side_note=row.get("benefit_side_note"),
         ))
 
     return DrugComparisonResponse(
@@ -73,7 +76,7 @@ def compare_plans(
 
     differences: List[PlanDiffEntry] = []
     compare_fields = ["coverage_status", "tier", "requires_prior_auth",
-                      "requires_step_therapy", "quantity_limit"]
+                      "requires_step_therapy", "quantity_limit", "benefit_side"]
 
     for drug_name in sorted(all_drugs):
         if drug_name in drugs_a and drug_name in drugs_b:

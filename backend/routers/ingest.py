@@ -21,6 +21,9 @@ async def upload_document(
     plan_type: str = Form(default=None),
     effective_date: str = Form(default=None),
     quarter: str = Form(default=None),
+    doc_type: str = Form(default=None),
+    drug: str = Form(default=None),
+    benefit_side: str = Form(default=None),
     db: Session = Depends(get_db),
 ):
     # Save to uploads dir
@@ -66,6 +69,7 @@ async def upload_document(
         db, plan_id=plan.id, filename=file.filename,
         file_path=str(dest_path), file_hash=file_hash,
         quarter=quarter, version=version,
+        doc_type=doc_type, drug_hint=drug, benefit_side_hint=benefit_side,
     )
 
     return IngestUploadResponse(
