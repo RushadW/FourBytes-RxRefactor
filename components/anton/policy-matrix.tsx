@@ -39,7 +39,7 @@ export function PolicyMatrix() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl border border-border/60 p-12 flex items-center justify-center">
+      <div className="bg-card rounded-2xl border border-border/70 p-12 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-primary mr-3" />
         <span className="text-sm text-muted-foreground">Loading policy matrix from scraped data...</span>
       </div>
@@ -48,7 +48,7 @@ export function PolicyMatrix() {
 
   if (error || !data) {
     return (
-      <div className="bg-white rounded-2xl border border-border/60 p-8 text-center">
+      <div className="bg-card rounded-2xl border border-border/70 p-8 text-center">
         <p className="text-sm text-muted-foreground">Could not load policy matrix. Is the backend running?</p>
       </div>
     )
@@ -88,7 +88,7 @@ export function PolicyMatrix() {
       </div>
 
       {/* Matrix Table */}
-      <div className="bg-white rounded-2xl border border-border/60 soft-shadow overflow-hidden">
+      <div className="bg-card rounded-2xl border border-border/70 soft-shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
@@ -135,11 +135,27 @@ export function PolicyMatrix() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.05 + rowIdx * 0.04 }}
                 >
-                  {/* Drug name */}
+                  {/* Drug name + generic from API policy when available */}
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <Pill className="w-3.5 h-3.5 text-primary/50 flex-shrink-0" />
-                      <span className="text-sm font-semibold text-foreground">{row.drug.drug_name}</span>
+                    <div className="flex items-start gap-2 min-w-0">
+                      <Pill className="w-3.5 h-3.5 text-primary/50 flex-shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <span className="text-sm font-semibold text-foreground block leading-snug">
+                          {row.drug.drug_name}
+                        </span>
+                        {(() => {
+                          const g =
+                            row.drug.generic_name?.trim() ||
+                            Object.values(row.cells)
+                              .map(c => c.policy?.generic_name)
+                              .find(x => x?.trim())
+                          return g && g.toLowerCase() !== row.drug.drug_name.toLowerCase() ? (
+                            <span className="text-[11px] text-muted-foreground leading-snug block mt-0.5">
+                              {g}
+                            </span>
+                          ) : null
+                        })()}
+                      </div>
                     </div>
                   </td>
 

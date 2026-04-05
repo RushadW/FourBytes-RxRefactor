@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#4F7FFF',
+  themeColor: '#4f46e5',
 }
 
 export default function RootLayout({
@@ -45,9 +45,9 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-sans antialiased">
         <Providers>
-          <div className="flex min-h-screen">
+          <div className="flex min-h-screen bg-background">
             <AppSidebar />
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 app-main-canvas relative">
               {children}
             </div>
           </div>

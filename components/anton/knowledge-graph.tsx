@@ -204,7 +204,7 @@ export function KnowledgeGraph() {
         ctx.lineTo(target.x, target.y)
         ctx.strokeStyle = isHighlighted || isConnectedToSelected
           ? edge.color
-          : hoveredNode || selectedNode ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.08)'
+          : hoveredNode || selectedNode ? 'rgba(15, 23, 42, 0.06)' : 'rgba(15, 23, 42, 0.12)'
         ctx.lineWidth = isHighlighted || isConnectedToSelected ? 2 : 1
         ctx.stroke()
 
@@ -213,7 +213,7 @@ export function KnowledgeGraph() {
           const mx = (source.x + target.x) / 2
           const my = (source.y + target.y) / 2
           ctx.font = '10px Geist, sans-serif'
-          ctx.fillStyle = 'rgba(255,255,255,0.6)'
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.55)'
           ctx.textAlign = 'center'
           ctx.fillText(edge.label, mx, my - 5)
         }
@@ -255,7 +255,7 @@ export function KnowledgeGraph() {
 
         // Label
         ctx.font = `${isHovered ? 'bold ' : ''}11px Geist, sans-serif`
-        ctx.fillStyle = isDimmed ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.9)'
+        ctx.fillStyle = isDimmed ? 'rgba(100, 116, 139, 0.45)' : 'rgba(15, 23, 42, 0.92)'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(node.label, node.x, node.y)
@@ -337,8 +337,8 @@ export function KnowledgeGraph() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center">
-            <Network className="w-5 h-5 text-cyan-400" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500/12 to-primary/10 ring-1 ring-border flex items-center justify-center">
+            <Network className="w-5 h-5 text-primary" />
           </div>
           <div>
             <h2 className="text-xl font-bold">Knowledge Graph</h2>

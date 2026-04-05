@@ -112,7 +112,7 @@ function QuickStatsWidget({ policies, drug, totalPolicies }: { policies: PayerPo
         return (
           <motion.div
             key={stat.label}
-            className="bg-white rounded-xl p-4 border border-border/60 soft-shadow text-center"
+            className="bg-card rounded-xl p-4 border border-border/70 soft-shadow text-center"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.08 }}
@@ -138,7 +138,7 @@ function ComparisonCardsWidget({ policies, drug }: { policies: PayerPolicy[]; dr
         {policies.map((policy, i) => (
           <motion.div
             key={policy.payerId}
-            className="bg-white rounded-xl p-4 border border-border/60 soft-shadow"
+            className="bg-card rounded-xl p-4 border border-border/70 soft-shadow"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 + i * 0.1 }}
@@ -184,7 +184,7 @@ function ComparisonCardsWidget({ policies, drug }: { policies: PayerPolicy[]; dr
 
 function StepTherapyVisualWidget({ policies, drug }: { policies: PayerPolicy[]; drug: Drug | null | undefined }) {
   return (
-    <div className="bg-white rounded-xl p-5 border border-border/60 soft-shadow">
+    <div className="bg-card rounded-xl p-5 border border-border/70 soft-shadow">
       <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
         <Clock className="w-4 h-4 text-rose-400" />
         Step Therapy Overview {drug ? `— ${drug.name}` : ''}
@@ -232,7 +232,7 @@ function SiteOfCareWidget({ policies, drug }: { policies: PayerPolicy[]; drug: D
   const allSites = new Set(policies.flatMap(p => p.siteOfCare))
   
   return (
-    <div className="bg-white rounded-xl p-5 border border-border/60 soft-shadow">
+    <div className="bg-card rounded-xl p-5 border border-border/70 soft-shadow">
       <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
         <Building2 className="w-4 h-4 text-primary" />
         Site of Care Availability — {drug?.name}
@@ -301,7 +301,7 @@ function CoverageVerdictWidget({ policies, payerName }: { policies: PayerPolicy[
         return (
           <motion.div
             key={policy.drugId}
-            className="bg-white rounded-xl p-4 border border-border/60 soft-shadow flex items-center gap-4"
+            className="bg-card rounded-xl p-4 border border-border/70 soft-shadow flex items-center gap-4"
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.1 }}
@@ -327,7 +327,7 @@ function CoverageVerdictWidget({ policies, payerName }: { policies: PayerPolicy[
 
 function PayerBreakdownWidget({ policies, payerName }: { policies: PayerPolicy[]; payerName: string }) {
   return (
-    <div className="bg-white rounded-xl p-5 border border-border/60 soft-shadow">
+    <div className="bg-card rounded-xl p-5 border border-border/70 soft-shadow">
       <h3 className="text-sm font-semibold text-foreground mb-3">{payerName} Details</h3>
       <div className="space-y-3">
         {policies.map(policy => {
@@ -399,7 +399,7 @@ function PolicyChangesWidget() {
   }
 
   return (
-    <div className="bg-white rounded-xl p-5 border border-border/60 soft-shadow">
+    <div className="bg-card rounded-xl p-5 border border-border/70 soft-shadow">
       <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
         <GitCompareArrows className="w-4 h-4 text-primary" />
         Recent Policy Changes
@@ -859,9 +859,9 @@ function DrugComparisonTable({ policies, drug }: {
     }
 
     return (
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-border bg-card overflow-hidden soft-shadow">
         {/* Header */}
-        <div className="px-5 py-3.5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+        <div className="px-5 py-3.5 bg-gradient-to-r from-muted/60 to-card border-b border-border/80">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-base font-bold text-slate-900">{drugName}</h3>
@@ -1040,9 +1040,9 @@ function PolicyDetailCards({ policies }: { policies: ApiAskResponse['relevant_po
   if (policies.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-slate-800">Policy Details</h3>
+    <div className="rounded-xl border border-border bg-card overflow-hidden soft-shadow">
+      <div className="px-4 py-3 border-b border-border/80 flex items-center justify-between bg-muted/20">
+        <h3 className="text-sm font-bold text-foreground">Policy Details</h3>
         <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
           {policies.length} {policies.length === 1 ? 'policy' : 'policies'}
         </span>
@@ -1320,9 +1320,9 @@ function SourceEvidence({ sources, policies }: {
   if (uniqueSources.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-slate-800">Source Evidence</h3>
+    <div className="rounded-xl border border-border bg-card overflow-hidden soft-shadow">
+      <div className="px-4 py-3 border-b border-border/80 flex items-center justify-between bg-muted/20">
+        <h3 className="text-sm font-bold text-foreground">Source Evidence</h3>
         <span className="text-[11px] text-indigo-600 font-medium cursor-pointer hover:underline">Page citations</span>
       </div>
       <div className="p-3 space-y-2">
@@ -1581,7 +1581,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
     return (
       <div className="p-6">
         <div className="flex items-start gap-3 mb-6">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-indigo-200 ring-2 ring-white">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary/20 ring-2 ring-card">
             <Stethoscope className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1 space-y-3 pt-1">
@@ -1606,9 +1606,9 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
   // ── Main render ──
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-[calc(100vh-3.5rem)]">
       {/* ═══════ LEFT: Chat-style Q&A + Widgets ═══════ */}
-      <div className="flex-1 flex flex-col min-w-0 border-r border-slate-200">
+      <div className="flex-1 flex flex-col min-w-0 border-r border-border/80 bg-card/40">
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
           {/* User question bubble */}
@@ -1617,10 +1617,10 @@ export function AIDashboard({ query }: AIDashboardProps) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-2xl rounded-tr-sm px-5 py-3 max-w-lg shadow-sm">
+            <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 text-white rounded-2xl rounded-tr-sm px-5 py-3.5 max-w-lg shadow-lg shadow-indigo-500/25 ring-1 ring-white/10">
               <p className="text-sm leading-relaxed">{query}</p>
             </div>
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center flex-shrink-0 shadow-md shadow-slate-200 ring-2 ring-white">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 flex items-center justify-center flex-shrink-0 shadow-md ring-2 ring-card">
               <User className="w-4.5 h-4.5 text-slate-200" />
             </div>
           </motion.div>
@@ -1632,7 +1632,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
           >
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-indigo-200 ring-2 ring-white">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary/25 ring-2 ring-card">
               <Stethoscope className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1 min-w-0 space-y-2.5">
@@ -1652,7 +1652,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
               {/* Answer card — only show when NOT a comparison query with data */}
               {!(isComparisonQuery(query) && comparisonPolicies) && (
-                <div className="bg-white rounded-2xl rounded-tl-sm border border-slate-200 p-6 shadow-sm">
+                <div className="bg-card rounded-2xl rounded-tl-sm border border-border/90 p-6 soft-shadow">
                   {aiResponse ? (
                     <div>
                       <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-100">
@@ -1722,8 +1722,8 @@ export function AIDashboard({ query }: AIDashboardProps) {
         </div>
 
         {/* Follow-up input (sticky bottom) */}
-        <div className="border-t border-slate-200 bg-white px-6 py-3">
-          <form onSubmit={handleFollowUp} className="flex items-center gap-2">
+        <div className="border-t border-border/80 bg-card/90 backdrop-blur-md px-6 py-3">
+          <form onSubmit={handleFollowUp} className="flex items-center gap-2 w-full">
             <VoiceOrb
               onTranscript={(text) => {
                 setFollowUp(text)
@@ -1744,7 +1744,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
                 onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
                 onBlur={() => { setTimeout(() => setShowSuggestions(false), 200) }}
                 placeholder="Ask a follow-up question..."
-                className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all placeholder:text-slate-400"
+                className="w-full px-4 py-2.5 text-sm bg-muted/50 border border-border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/35 transition-all placeholder:text-muted-foreground"
               />
               {/* Autocomplete dropdown */}
               <AnimatePresence>
@@ -1753,7 +1753,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 4 }}
-                    className="absolute bottom-full left-0 right-0 mb-1.5 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50"
+                    className="absolute bottom-full left-0 right-0 mb-1.5 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50"
                   >
                     {suggestions.map((s, i) => (
                       <button
@@ -1778,7 +1778,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
             <button
               type="submit"
               disabled={!followUp.trim()}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-md shadow-primary/20"
             >
               Send <Send className="w-3.5 h-3.5" />
             </button>
@@ -1788,18 +1788,18 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
       {/* ═══════ RIGHT: Policy Matches + Sources + Actions ═══════ */}
       {rightPanelOpen ? (
-        <div className="w-[500px] shrink-0 overflow-y-auto bg-slate-50/50 space-y-4 hidden lg:block relative">
+        <div className="w-[500px] shrink-0 overflow-y-auto bg-muted/35 space-y-4 hidden lg:block relative border-l border-border/60">
           {/* Collapse button in panel header */}
-          <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-            <span className="text-xs font-bold text-slate-600">Policy Details & Sources</span>
+          <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-card/90 backdrop-blur-md border-b border-border/80">
+            <span className="text-xs font-bold text-foreground tracking-wide">Details & sources</span>
             <button
               onClick={() => setRightPanelOpen(false)}
-              className="p-1 rounded-md hover:bg-slate-200 transition-colors group" title="Collapse panel"
+              className="p-1.5 rounded-lg hover:bg-muted transition-colors group" title="Collapse panel"
             >
-              <PanelRightClose className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+              <PanelRightClose className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
             </button>
           </div>
-          <div className="px-4 pb-4 space-y-4">
+          <div className="px-4 pb-6 pt-2 space-y-4">
             {/* Policy Details — show from apiData immediately, upgrade to aiResponse when ready */}
             {(aiResponse?.relevant_policies?.length || apiData?.rawPolicies?.length) ? (
               <motion.div
@@ -1826,10 +1826,10 @@ export function AIDashboard({ query }: AIDashboardProps) {
       ) : (
         <button
           onClick={() => setRightPanelOpen(true)}
-          className="hidden lg:flex items-center justify-center w-8 shrink-0 bg-slate-50 hover:bg-slate-100 border-l border-slate-200 transition-colors group"
+          className="hidden lg:flex items-center justify-center w-9 shrink-0 bg-muted/50 hover:bg-muted border-l border-border/80 transition-colors group"
           title="Expand panel"
         >
-          <PanelRightOpen className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+          <PanelRightOpen className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
         </button>
       )}
     </div>

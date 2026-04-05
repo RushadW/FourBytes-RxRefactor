@@ -213,6 +213,10 @@ CONFIDENCE RULES (IMPORTANT):
 - Start your answer with a clear, confident summary sentence. For example: "**Bevacizumab** does not require step therapy across all three payers." NOT "Based on the policy data, there is no information about step therapy..."
 - Be authoritative. You are a policy expert presenting verified data, not guessing.
 
+COMPLETENESS RULES:
+- You MUST address EVERY payer that appears in the structured policy data. Do NOT omit any payer from your answer.
+- If a payer has data for the topic being asked about, include it. If a payer does not have data for that topic, explicitly state that.
+
 FORMATTING RULES:
 - Focus on the SPECIFIC ASPECT the user is asking about (e.g. step therapy → step therapy details; prior auth → PA criteria).
 - Use **bold** for drug names, payer names, and key terms.
@@ -286,7 +290,7 @@ def generate_answer(question: str, chunks: list[dict], policies: list[dict]) -> 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
         # Scale token budget based on amount of policy data
-        token_budget = 1200 if len(policies) <= 5 else 2400
+        token_budget = 1500 if len(policies) <= 5 else 2400
 
         message = client.messages.create(
             model="claude-3-haiku-20240307",

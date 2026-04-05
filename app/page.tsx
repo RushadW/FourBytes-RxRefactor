@@ -8,9 +8,9 @@ export default function HomePage() {
         <SearchHero />
         
         {/* Subtle footer hint */}
-        <div className="mt-12 text-center">
-          <p className="text-xs text-muted-foreground/60">
-            Powered by AI · Just ask a question and we handle the rest
+        <div className="mt-14 text-center max-w-md mx-auto">
+          <p className="text-[11px] text-muted-foreground/55 tracking-wide">
+            Evidence-grounded answers · Document-linked sources · Same secure API
           </p>
         </div>
       </main>

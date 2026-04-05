@@ -316,6 +316,10 @@ export interface MatrixPayer {
 export interface MatrixDrug {
   drug_id: string
   drug_name: string
+  /** Present when the API includes them on matrix rows. */
+  generic_name?: string
+  drug_category?: string
+  therapeutic_area?: string
 }
 
 export interface MatrixRow {

@@ -90,11 +90,14 @@ const alerts: PolicyAlert[] = [
   },
 ]
 
+/** Count of items on the Alerts page feed (sidebar badge uses this; not API notifications). */
+export const SMART_ALERTS_FEED_COUNT = alerts.length
+
 const severityConfig = {
-  critical: { icon: <Flame className="w-4 h-4" />, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20', badge: 'bg-red-500/20 text-red-400' },
-  warning: { icon: <AlertTriangle className="w-4 h-4" />, color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/20', badge: 'bg-yellow-500/20 text-yellow-400' },
-  info: { icon: <Info className="w-4 h-4" />, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', badge: 'bg-blue-500/20 text-blue-400' },
-  positive: { icon: <CheckCircle2 className="w-4 h-4" />, color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/20', badge: 'bg-green-500/20 text-green-400' },
+  critical: { icon: <Flame className="w-4 h-4" />, color: 'text-red-600', bg: 'bg-red-500/10 border-red-500/25', badge: 'bg-red-500/15 text-red-700 border border-red-500/20' },
+  warning: { icon: <AlertTriangle className="w-4 h-4" />, color: 'text-amber-600', bg: 'bg-amber-500/10 border-amber-500/25', badge: 'bg-amber-500/15 text-amber-800 border border-amber-500/20' },
+  info: { icon: <Info className="w-4 h-4" />, color: 'text-primary', bg: 'bg-primary/10 border-primary/20', badge: 'bg-primary/12 text-primary border border-primary/20' },
+  positive: { icon: <CheckCircle2 className="w-4 h-4" />, color: 'text-emerald-600', bg: 'bg-emerald-500/10 border-emerald-500/25', badge: 'bg-emerald-500/15 text-emerald-800 border border-emerald-500/20' },
 }
 
 export function SmartAlerts() {
@@ -114,8 +117,8 @@ export function SmartAlerts() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center">
-          <Bell className="w-5 h-5 text-red-400" />
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/15 to-orange-500/10 ring-1 ring-border flex items-center justify-center">
+          <Bell className="w-5 h-5 text-red-600" />
         </div>
         <div>
           <h2 className="text-xl font-bold">Smart Alerts</h2>
@@ -138,7 +141,7 @@ export function SmartAlerts() {
           whileHover={{ y: -2 }}
           onClick={() => setFilter('critical')}
         >
-          <div className="text-2xl font-bold text-red-400">{stats.critical}</div>
+          <div className="text-2xl font-bold text-red-600 tabular-nums">{stats.critical}</div>
           <div className="text-[10px] text-muted-foreground uppercase mt-1">Critical</div>
         </motion.div>
         <motion.div
@@ -146,7 +149,7 @@ export function SmartAlerts() {
           whileHover={{ y: -2 }}
           onClick={() => setFilter('warning')}
         >
-          <div className="text-2xl font-bold text-yellow-400">{stats.warning}</div>
+          <div className="text-2xl font-bold text-amber-600 tabular-nums">{stats.warning}</div>
           <div className="text-[10px] text-muted-foreground uppercase mt-1">Warnings</div>
         </motion.div>
         <motion.div
@@ -154,7 +157,7 @@ export function SmartAlerts() {
           whileHover={{ y: -2 }}
           onClick={() => setFilter('positive')}
         >
-          <div className="text-2xl font-bold text-green-400">{stats.positive}</div>
+          <div className="text-2xl font-bold text-emerald-600 tabular-nums">{stats.positive}</div>
           <div className="text-[10px] text-muted-foreground uppercase mt-1">Positive</div>
         </motion.div>
       </div>
@@ -209,7 +212,7 @@ export function SmartAlerts() {
                         {alert.trend && (
                           <span className={cn(
                             'flex items-center gap-0.5 text-[10px]',
-                            alert.trend === 'up' ? 'text-green-400' : alert.trend === 'down' ? 'text-red-400' : 'text-muted-foreground'
+                            alert.trend === 'up' ? 'text-emerald-600' : alert.trend === 'down' ? 'text-red-600' : 'text-muted-foreground'
                           )}>
                             {alert.trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                             Access
@@ -218,7 +221,7 @@ export function SmartAlerts() {
                       </div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs px-2 py-0.5 rounded-md bg-secondary text-muted-foreground">{alert.payer}</span>
-                        <span className="text-xs px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400">{alert.drug}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-md bg-primary/10 text-primary font-medium">{alert.drug}</span>
                       </div>
                       <p className="text-sm font-medium text-foreground">{alert.change}</p>
                     </div>

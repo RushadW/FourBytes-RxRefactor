@@ -109,8 +109,8 @@ export function PolicyDiffView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center">
-            <GitCompareArrows className="w-5 h-5 text-orange-400" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500/12 to-rose-500/10 ring-1 ring-border flex items-center justify-center">
+            <GitCompareArrows className="w-5 h-5 text-orange-600" />
           </div>
           <div>
             <h2 className="text-xl font-bold">Policy Diff Viewer</h2>
@@ -249,7 +249,7 @@ export function PolicyDiffView() {
                       <Minus className="w-3 h-3 text-red-400" />
                       <span className="text-[10px] uppercase text-red-400 font-semibold">Before</span>
                     </div>
-                    <p className="text-sm text-red-300/80 line-through decoration-red-400/40">
+                    <p className="text-sm text-rose-800/90 line-through decoration-rose-400/50">
                       {change.oldValue}
                     </p>
                   </div>
@@ -263,7 +263,7 @@ export function PolicyDiffView() {
                       <Plus className="w-3 h-3 text-green-400" />
                       <span className="text-[10px] uppercase text-green-400 font-semibold">After</span>
                     </div>
-                    <p className="text-sm text-green-300/90 font-medium">
+                    <p className="text-sm text-emerald-900 font-medium">
                       {change.newValue}
                     </p>
                   </div>
@@ -280,19 +280,19 @@ export function PolicyDiffView() {
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="text-center p-3 rounded-lg bg-red-500/10">
-                <div className="text-lg font-bold text-red-400">
+                <div className="text-lg font-bold text-red-600 tabular-nums">
                   {versions[selectedVersionIdx]?.changes.filter(c => c.severity === 'major').length || 0}
                 </div>
                 <div className="text-[10px] text-muted-foreground uppercase">Major</div>
               </div>
               <div className="text-center p-3 rounded-lg bg-yellow-500/10">
-                <div className="text-lg font-bold text-yellow-400">
+                <div className="text-lg font-bold text-amber-600 tabular-nums">
                   {versions[selectedVersionIdx]?.changes.filter(c => c.severity === 'minor').length || 0}
                 </div>
                 <div className="text-[10px] text-muted-foreground uppercase">Minor</div>
               </div>
               <div className="text-center p-3 rounded-lg bg-blue-500/10">
-                <div className="text-lg font-bold text-blue-400">
+                <div className="text-lg font-bold text-primary tabular-nums">
                   {versions[selectedVersionIdx]?.changes.filter(c => c.severity === 'info').length || 0}
                 </div>
                 <div className="text-[10px] text-muted-foreground uppercase">Info</div>
