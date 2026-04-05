@@ -347,15 +347,68 @@ def ask_question(req: AskRequest, db: Session = Depends(get_db)):
         else:
             del _ask_cache[key]
 
+    # Server-side query parsing — extract drug/payer hints if client didn't send them
+    drug_ids = req.drug_ids or []
+    payer_ids = req.payer_ids or []
+    if not drug_ids or not payer_ids:
+        q_lower = req.question.lower()
+        _DRUG_MAP = {
+            "rituximab": "rituximab", "rituxan": "rituximab", "riabni": "rituximab",
+            "humira": "humira", "adalimumab": "adalimumab",
+            "bevacizumab": "bevacizumab", "avastin": "bevacizumab",
+            "botox": "botulinum", "botulinum": "botulinum",
+            "denosumab": "denosumab", "prolia": "denosumab", "xgeva": "denosumab",
+            "infliximab": "infliximab", "remicade": "infliximab",
+            "trastuzumab": "trastuzumab", "herceptin": "trastuzumab",
+            "pembrolizumab": "pembrolizumab", "keytruda": "pembrolizumab",
+            "nivolumab": "nivolumab", "opdivo": "nivolumab",
+            "ocrelizumab": "ocrelizumab", "ocrevus": "ocrelizumab",
+            "natalizumab": "natalizumab", "tysabri": "natalizumab",
+            "ustekinumab": "ustekinumab", "stelara": "ustekinumab",
+            "vedolizumab": "vedolizumab", "entyvio": "vedolizumab",
+            "dupilumab": "dupilumab", "dupixent": "dupilumab",
+            "secukinumab": "secukinumab", "cosentyx": "secukinumab",
+        }
+        _PAYER_MAP = {
+            "cigna": "cigna",
+            "uhc": "uhc", "united": "uhc", "unitedhealthcare": "uhc",
+            "bcbs": "bcbs_nc", "blue cross": "bcbs_nc", "blue shield": "bcbs_nc",
+            "upmc": "upmc", "priority health": "priority_health",
+            "emblem": "emblemhealth", "emblemhealth": "emblemhealth",
+            "florida blue": "florida_blue",
+        }
+        if not drug_ids:
+            drug_ids = list({v for k, v in _DRUG_MAP.items() if k in q_lower})
+        if not payer_ids:
+            payer_ids = list({v for k, v in _PAYER_MAP.items() if k in q_lower})
+
+    # More chunks for multi-payer/drug comparison queries
+    n_chunks = 3
+    if len(drug_ids) > 1 or len(payer_ids) > 1 or not payer_ids:
+        n_chunks = 5
+
     chunks = rag_search(
         req.question,
-        n_results=5,
-        payer_ids=req.payer_ids,
-        drug_ids=req.drug_ids,
+        n_results=n_chunks,
+        payer_ids=payer_ids or None,
+        drug_ids=drug_ids or None,
     )
+
+    # Filter out low-relevance chunks (prevents returning unrelated drug info)
+    MIN_RELEVANCE = 0.25
+    chunks = [c for c in chunks if c.get("score", 0) >= MIN_RELEVANCE]
 
     # Gather relevant structured policies + document URLs
     policy_ids = {c["metadata"].get("policy_id") for c in chunks if c.get("metadata")}
+
+    # Also pull in DB policies for the detected drugs so the answer covers all payers
+    if drug_ids:
+        q_db = db.query(PolicyRecord).filter(PolicyRecord.drug_id.in_(drug_ids))
+        if payer_ids:
+            q_db = q_db.filter(PolicyRecord.payer_id.in_(payer_ids))
+        for p in q_db.all():
+            policy_ids.add(p.id)
+
     policies_data: list[dict] = []
     policy_responses: list[PolicyResponse] = []
     doc_urls: dict[str, str] = {}  # policy_id -> source_url

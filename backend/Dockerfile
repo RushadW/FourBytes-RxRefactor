@@ -9,9 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy application code
+COPY app/ ./app/
 
+# Copy pre-built data (SQLite DB + ChromaDB index)
 RUN mkdir -p /app/data/documents /app/data/chroma
+COPY data/anton_rx.db /app/data/anton_rx.db
+COPY data/chroma/ /app/data/chroma/
 
 ENV PORT=8080
 ENV DATABASE_URL=sqlite:////app/data/anton_rx.db

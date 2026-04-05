@@ -173,23 +173,70 @@ export async function fetchComparison(drugId: string, startTime: number): Promis
   const data: ApiComparisonResponse = await res.json()
 
   const drug = toDrug(data.drug)
-  const policies = data.payers
+  const rawPolicies = data.payers
     .filter(p => p.policy !== null)
-    .map(p => toPayerPolicy(p.policy!))
+    .map(p => p.policy!)
+  const policies = rawPolicies.map(toPayerPolicy)
 
   return {
     drug,
     policies,
+    rawPolicies,
     aiSummary: generateSummary(drug, policies),
     insights: generateInsights(policies),
     lastUpdated: new Date().toISOString(),
     confidence: 'high',
     stats: {
-      policiesAnalyzed: policies.length * 4,
+      policiesAnalyzed: policies.length,
       processingTimeMs: Date.now() - startTime,
       startTime,
     },
   }
+}
+
+// ---------- Query parsing helpers ----------
+
+const DRUG_ALIASES: Record<string, string> = {
+  rituximab: 'rituximab', rituxan: 'rituximab', riabni: 'rituximab', ruxience: 'rituximab', truxima: 'rituximab',
+  humira: 'humira', adalimumab: 'adalimumab',
+  bevacizumab: 'bevacizumab', avastin: 'bevacizumab',
+  botox: 'botulinum', botulinum: 'botulinum', 'botulinum toxin': 'botulinum',
+  denosumab: 'denosumab', prolia: 'denosumab', xgeva: 'denosumab',
+  infliximab: 'infliximab', remicade: 'infliximab',
+  trastuzumab: 'trastuzumab', herceptin: 'trastuzumab',
+  pembrolizumab: 'pembrolizumab', keytruda: 'pembrolizumab',
+  nivolumab: 'nivolumab', opdivo: 'nivolumab',
+  ocrelizumab: 'ocrelizumab', ocrevus: 'ocrelizumab',
+  natalizumab: 'natalizumab', tysabri: 'natalizumab',
+  ustekinumab: 'ustekinumab', stelara: 'ustekinumab',
+  vedolizumab: 'vedolizumab', entyvio: 'vedolizumab',
+  dupilumab: 'dupilumab', dupixent: 'dupilumab',
+  secukinumab: 'secukinumab', cosentyx: 'secukinumab',
+}
+
+const PAYER_ALIASES: Record<string, string> = {
+  cigna: 'cigna',
+  uhc: 'uhc', united: 'uhc', unitedhealthcare: 'uhc', 'united healthcare': 'uhc',
+  bcbs: 'bcbs_nc', 'blue cross': 'bcbs_nc', 'blue shield': 'bcbs_nc',
+  upmc: 'upmc',
+  'priority health': 'priority_health', priorityhealth: 'priority_health',
+  emblem: 'emblemhealth', emblemhealth: 'emblemhealth',
+  'florida blue': 'florida_blue',
+}
+
+export function parseQueryFilters(question: string): { drugIds: string[]; payerIds: string[] } {
+  const q = question.toLowerCase()
+  const drugIds = [...new Set(
+    Object.entries(DRUG_ALIASES)
+      .filter(([alias]) => q.includes(alias))
+      .map(([, id]) => id)
+  )]
+  const payerIds = [...new Set(
+    Object.entries(PAYER_ALIASES)
+      .filter(([alias]) => q.includes(alias))
+      .map(([, id]) => id)
+  )]
+  return { drugIds, payerIds }
 }
 
 // ---------- Ask (with client-side cache) ----------
@@ -197,23 +244,37 @@ export async function fetchComparison(drugId: string, startTime: number): Promis
 const _askCache = new Map<string, { ts: number; data: ApiAskResponse }>()
 const ASK_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
 
-export async function askQuestion(question: string): Promise<ApiAskResponse> {
+export async function askQuestion(question: string, drugIds?: string[], payerIds?: string[]): Promise<ApiAskResponse> {
   const key = question.trim().toLowerCase()
   const cached = _askCache.get(key)
   if (cached && Date.now() - cached.ts < ASK_CACHE_TTL) {
     return cached.data
   }
 
-  const res = await fetch(`${API_BASE}/ask`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
-  })
-  if (!res.ok) throw new Error(`API error: ${res.status}`)
-  const data: ApiAskResponse = await res.json()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 25000)
 
-  _askCache.set(key, { ts: Date.now(), data })
-  return data
+  try {
+    const body: Record<string, unknown> = { question }
+    if (drugIds?.length) body.drug_ids = drugIds
+    if (payerIds?.length) body.payer_ids = payerIds
+
+    const res = await fetch(`${API_BASE}/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+    if (!res.ok) throw new Error(`API error: ${res.status}`)
+    const data: ApiAskResponse = await res.json()
+
+    _askCache.set(key, { ts: Date.now(), data })
+    return data
+  } catch (err) {
+    clearTimeout(timeoutId)
+    throw err
+  }
 }
 
 export async function fetchDrugs(): Promise<Drug[]> {

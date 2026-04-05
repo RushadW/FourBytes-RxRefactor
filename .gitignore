@@ -16,4 +16,8 @@ next.user-config.*
 node_modules
 .next/
 .DS_Store
+__pycache__/
 backend/app/__pycache__
+backend/data/chroma/
+backend/data/documents/
+.vercel

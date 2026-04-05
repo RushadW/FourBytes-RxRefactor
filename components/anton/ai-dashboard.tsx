@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles, TrendingUp, TrendingDown, Shield, Clock, Building2,
@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { SpeakButton } from './voice-orb'
 import { parseQuery, getPoliciesForDrug, getDrugById, drugs, payerPolicies } from '@/lib/mock-data'
-import { fetchComparison, askQuestion, fetchPolicyVersions, type ApiAskResponse, type PolicyVersionRecord } from '@/lib/api'
+import { fetchComparison, askQuestion, fetchPolicyVersions, parseQueryFilters, type ApiAskResponse, type PolicyVersionRecord } from '@/lib/api'
 import type { PayerPolicy, Drug, Insight } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { PolicyMatrix } from './policy-matrix'
@@ -93,10 +93,11 @@ function generateDashboard(query: string, policies: PayerPolicy[], drug: Drug | 
 
 // ============= WIDGET COMPONENTS =============
 
-function QuickStatsWidget({ policies, drug }: { policies: PayerPolicy[]; drug: Drug | undefined }) {
+function QuickStatsWidget({ policies, drug, totalPolicies }: { policies: PayerPolicy[]; drug: Drug | undefined; totalPolicies?: number }) {
+  const uniquePayers = new Set(policies.map(p => p.payerId)).size
   const stats = [
-    { label: 'Policies Analyzed', value: policies.length * 4, icon: FileText, color: 'text-primary' },
-    { label: 'Payers Compared', value: policies.length, icon: Building2, color: 'text-primary' },
+    { label: 'Policies Analyzed', value: totalPolicies ?? policies.length, icon: FileText, color: 'text-primary' },
+    { label: 'Payers Compared', value: uniquePayers, icon: Building2, color: 'text-primary' },
     { label: 'Prior Auth Required', value: policies.filter(p => p.priorAuth).length, icon: Shield, color: 'text-amber-500' },
     { label: 'Step Therapy', value: policies.filter(p => p.stepTherapy).length, icon: Clock, color: 'text-primary' },
   ]
@@ -832,9 +833,9 @@ function DrugComparisonTable({ policies, drug }: {
             </thead>
             <tbody>
               {sections.map(section => (
-                <>
+                <Fragment key={section.label}>
                   {/* Section header */}
-                  <tr key={`sh-${section.label}`} className="bg-slate-50/60">
+                  <tr className="bg-slate-50/60">
                     <td colSpan={payers.length + 1} className="px-4 py-2">
                       <span className={cn('text-[10px] font-bold uppercase tracking-wider', section.color)}>
                         {section.label}
@@ -854,7 +855,7 @@ function DrugComparisonTable({ policies, drug }: {
                       ))}
                     </tr>
                   ))}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -1237,48 +1238,51 @@ interface AIDashboardProps {
 }
 
 export function AIDashboard({ query }: AIDashboardProps) {
-  const [apiData, setApiData] = useState<{ drug: Drug; policies: PayerPolicy[]; allPolicies: PayerPolicy[] } | null>(null)
+  const [apiData, setApiData] = useState<{ drug: Drug; policies: PayerPolicy[]; allPolicies: PayerPolicy[]; rawPolicies?: ApiAskResponse['relevant_policies'] } | null>(null)
   const [aiResponse, setAiResponse] = useState<ApiAskResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [aiLoading, setAiLoading] = useState(true)
   const [followUp, setFollowUp] = useState('')
 
-  // Fetch from API on mount
+  // Fetch from API on mount — structured data first, AI answer async
   useEffect(() => {
-    const q = query.toLowerCase()
-    let drugId = 'rituximab'
-    if (q.includes('humira')) drugId = 'humira'
-    if (q.includes('adalimumab')) drugId = 'adalimumab'
-    if (q.includes('bevacizumab')) drugId = 'bevacizumab'
-    if (q.includes('botulinum') || q.includes('botox')) drugId = 'botulinum'
-    if (q.includes('denosumab') || q.includes('prolia') || q.includes('xgeva')) drugId = 'denosumab'
-    if (q.includes('rituximab') || q.includes('rituxan')) drugId = 'rituximab'
+    const { drugIds, payerIds } = parseQueryFilters(query)
+    const drugId = drugIds[0] || null
 
-    // Fetch structured data + AI answer in parallel
-    Promise.allSettled([
-      fetchComparison(drugId, Date.now()),
-      askQuestion(query),
-    ]).then(([compResult, aiResult]) => {
-      if (compResult.status === 'fulfilled') {
-        setApiData({ drug: compResult.value.drug, policies: compResult.value.policies, allPolicies: compResult.value.policies })
-      } else {
-        const drug = getDrugById(drugId)
-        const policies = getPoliciesForDrug(drugId)
-        if (drug) {
-          setApiData({ drug, policies, allPolicies: payerPolicies })
-        }
-      }
+    // 1) Fetch structured comparison data FAST (SQL only, <50ms)
+    //    Only fetch if we detected a specific drug in the query
+    if (drugId) {
+      fetchComparison(drugId, Date.now())
+        .then(result => {
+          setApiData({ drug: result.drug, policies: result.policies, allPolicies: result.policies, rawPolicies: result.rawPolicies })
+        })
+        .catch(() => {
+          const drug = getDrugById(drugId)
+          const policies = getPoliciesForDrug(drugId)
+          if (drug) {
+            setApiData({ drug, policies, allPolicies: payerPolicies })
+          }
+        })
+        .finally(() => setLoading(false))
+    } else {
+      setLoading(false)
+    }
 
-      if (aiResult.status === 'fulfilled') {
-        setAiResponse(aiResult.value)
-      }
-    }).finally(() => setLoading(false))
+    // 2) Fetch AI answer in background (Claude call, may take a few seconds)
+    //    Pass drug/payer filters so RAG searches the right vector chunks
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 25000)
+    askQuestion(query, drugIds.length ? drugIds : undefined, payerIds.length ? payerIds : undefined)
+      .then(result => setAiResponse(result))
+      .catch(() => {})
+      .finally(() => { setAiLoading(false); clearTimeout(timeoutId) })
+
+    return () => { controller.abort(); clearTimeout(timeoutId) }
   }, [query])
 
   const dashboard = useMemo(() => {
     if (!apiData) {
-      const drug = getDrugById('rituximab')
-      const policies = getPoliciesForDrug('rituximab')
-      return generateDashboard(query, policies, drug, payerPolicies)
+      return { summary: '', widgets: [] }
     }
     return generateDashboard(query, apiData.policies, apiData.drug, apiData.allPolicies)
   }, [query, apiData])
@@ -1307,6 +1311,13 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
   const answerText = aiResponse?.answer || dashboard.summary
   const plainAnswer = answerText.replace(/\*\*/g, '').replace(/#/g, '')
+
+  // Build policies for comparison table from best available source
+  const comparisonPolicies = aiResponse?.relevant_policies && aiResponse.relevant_policies.length > 1
+    ? aiResponse.relevant_policies
+    : apiData?.rawPolicies && apiData.rawPolicies.length > 1
+      ? apiData.rawPolicies
+      : null
 
   const handleFollowUp = (e: React.FormEvent) => {
     e.preventDefault()
@@ -1375,24 +1386,39 @@ export function AIDashboard({ query }: AIDashboardProps) {
             </div>
             <div className="flex-1 min-w-0 space-y-2.5">
               {/* Comparison table (if comparison query with structured data) */}
-              {isComparisonQuery(query) && aiResponse?.relevant_policies && aiResponse.relevant_policies.length > 1 && (
+              {isComparisonQuery(query) && comparisonPolicies && (
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
                 >
                   <DrugComparisonTable
-                    policies={aiResponse.relevant_policies}
+                    policies={comparisonPolicies}
                     drug={apiData?.drug ? { name: apiData.drug.name, generic_name: apiData.drug.genericName, drug_category: apiData.drug.drugCategory, therapeutic_area: apiData.drug.therapeuticArea } : undefined}
                   />
                 </motion.div>
               )}
 
-              {/* Answer card (text summary — shown below table for comparisons, or alone for non-comparisons) */}
-              {(!isComparisonQuery(query) || !aiResponse?.relevant_policies || aiResponse.relevant_policies.length <= 1) && (
+              {/* Answer card — show structured summary immediately, replace with AI when ready */}
+              {(!isComparisonQuery(query) || !comparisonPolicies) && (
                 <div className="bg-white rounded-2xl rounded-tl-sm border border-slate-200 p-5 shadow-sm">
                   {aiResponse ? (
                     <RenderedMarkdown text={answerText} />
+                  ) : aiLoading ? (
+                    <div className="space-y-2">
+                      <p className="text-sm leading-relaxed text-slate-700">
+                        {dashboard.summary.split(/(\*\*.*?\*\*)/).map((part, i) => {
+                          if (part.startsWith('**') && part.endsWith('**')) {
+                            return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
+                          }
+                          return <span key={i}>{part}</span>
+                        })}
+                      </p>
+                      <div className="flex items-center gap-2 pt-1">
+                        <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-[11px] text-slate-400">Generating detailed AI analysis...</span>
+                      </div>
+                    </div>
                   ) : (
                     <p className="text-sm leading-relaxed text-slate-700">
                       {dashboard.summary.split(/(\*\*.*?\*\*)/).map((part, i) => {
@@ -1410,20 +1436,20 @@ export function AIDashboard({ query }: AIDashboardProps) {
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  {aiResponse ? 'Tier 2 — Claude AI RAG · ~$0.01' : 'Tier 1 — Structured DB · No LLM call · $0.00'}
+                  {aiResponse ? 'Tier 2 — Claude AI RAG · ~$0.01' : aiLoading ? 'Fetching AI analysis...' : 'Tier 1 — Structured DB · No LLM call · $0.00'}
                 </span>
               </div>
             </div>
           </motion.div>
 
-          {/* Quick Stats */}
+          {/* Quick Stats — only show when we have relevant drug-specific data */}
           {apiData && apiData.policies.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <QuickStatsWidget policies={apiData.policies} drug={apiData.drug} />
+              <QuickStatsWidget policies={apiData.policies} drug={apiData.drug} totalPolicies={aiResponse?.relevant_policies?.length ?? apiData.policies.length} />
             </motion.div>
           )}
 
@@ -1431,7 +1457,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
           {dashboard.widgets
             .filter(w => w.type !== 'quick-stats')
             .filter(w => {
-              if (isComparisonQuery(query) && aiResponse?.relevant_policies && aiResponse.relevant_policies.length > 1) {
+              if (isComparisonQuery(query) && comparisonPolicies) {
                 // Comparison table already covers these
                 return !['full-matrix', 'comparison-cards', 'step-therapy-visual', 'site-of-care', 'key-insight'].includes(w.type)
               }
@@ -1463,16 +1489,16 @@ export function AIDashboard({ query }: AIDashboardProps) {
 
       {/* ═══════ RIGHT: Policy Matches + Sources + Actions ═══════ */}
       <div className="w-[500px] shrink-0 overflow-y-auto bg-slate-50/50 p-4 space-y-4 hidden lg:block">
-        {/* Policy Details */}
-        {aiResponse && aiResponse.relevant_policies.length > 0 && (
+        {/* Policy Details — show from apiData immediately, upgrade to aiResponse when ready */}
+        {(aiResponse?.relevant_policies?.length || apiData?.rawPolicies?.length) ? (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <PolicyDetailCards policies={aiResponse.relevant_policies} />
+            <PolicyDetailCards policies={aiResponse?.relevant_policies ?? apiData?.rawPolicies ?? []} />
           </motion.div>
-        )}
+        ) : null}
 
         {/* Source Evidence */}
         {aiResponse && aiResponse.sources.length > 0 && (
