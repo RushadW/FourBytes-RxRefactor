@@ -227,7 +227,7 @@ export function AppSidebar() {
             {apiConnected ? 'API connected' : 'API offline'}
           </span>
         </div>
-        <p className="text-[10px] text-slate-500">Q2 2026 · {planCount} plans loaded</p>
+        <p className="text-[10px] text-slate-500">{`Q${Math.ceil((new Date().getMonth() + 1) / 3)} ${new Date().getFullYear()}`} · {planCount} plans loaded</p>
       </div>
     </aside>
   )

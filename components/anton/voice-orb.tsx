@@ -64,6 +64,7 @@ export function VoiceOrb({ onTranscript, className, size = 'md' }: VoiceOrbProps
     <>
       {/* Mic Button */}
       <motion.button
+        type="button"
         onClick={handleClick}
         className={cn(
           'relative rounded-full flex items-center justify-center transition-all',

@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AIDashboard } from '@/components/anton/ai-dashboard'
 
@@ -10,14 +9,6 @@ function ResultsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const query = searchParams.get('q') || ''
-  const [planCount, setPlanCount] = useState(0)
-
-  useEffect(() => {
-    fetch('http://localhost:8080/api/matrix')
-      .then(r => r.json())
-      .then(data => setPlanCount(data.payers?.length || 0))
-      .catch(() => {})
-  }, [])
 
   if (!query) {
     return (
@@ -35,21 +26,6 @@ function ResultsContent() {
       {/* Page Header */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-white shrink-0">
         <h1 className="text-base font-bold text-slate-800">Ask AI</h1>
-        <div className="flex items-center gap-2.5">
-          {planCount > 0 && (
-            <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
-              {planCount} Plans
-            </span>
-          )}
-          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Live
-          </span>
-          <button className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200 hover:bg-slate-200 transition-colors">
-            <Settings className="w-3 h-3" />
-            Settings
-          </button>
-        </div>
       </header>
 
       {/* Dashboard */}

@@ -354,7 +354,7 @@ def ask_question(req: AskRequest, db: Session = Depends(get_db)):
         q_lower = req.question.lower()
         _DRUG_MAP = {
             "rituximab": "rituximab", "rituxan": "rituximab", "riabni": "rituximab",
-            "humira": "humira", "adalimumab": "adalimumab",
+            "humira": "adalimumab", "adalimumab": "adalimumab",
             "bevacizumab": "bevacizumab", "avastin": "bevacizumab",
             "botox": "botulinum", "botulinum": "botulinum",
             "denosumab": "denosumab", "prolia": "denosumab", "xgeva": "denosumab",

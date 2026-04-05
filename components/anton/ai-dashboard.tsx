@@ -7,6 +7,7 @@ import {
   CheckCircle2, AlertTriangle, XCircle, GitCompareArrows, Pill,
   BarChart3, FileText, Lightbulb, ArrowRight, ExternalLink,
   Globe, BookOpen, Zap, BadgeCheck, ChevronDown, Send, Copy, History, Download,
+  PanelRightClose, PanelRightOpen,
 } from 'lucide-react'
 import { SpeakButton } from './voice-orb'
 import { parseQuery, getPoliciesForDrug, getDrugById, drugs, payerPolicies } from '@/lib/mock-data'
@@ -561,6 +562,11 @@ function isComparisonQuery(q: string): boolean {
   )
 }
 
+function isBroadQuery(q: string): boolean {
+  const lower = q.toLowerCase()
+  return lower.includes('all drugs') || lower.includes('all policies') || lower.includes('all plans') || lower.includes('coverage grid')
+}
+
 function DrugComparisonTable({ policies, drug }: {
   policies: ApiAskResponse['relevant_policies']
   drug?: { name: string; generic_name?: string; drug_category?: string; therapeutic_area?: string }
@@ -871,8 +877,13 @@ function DrugComparisonTable({ policies, drug }: {
     )
   }
 
-  // Multi-drug comparison — render one DrugComparisonCard per drug
+  // Multi-drug comparison — render one DrugComparisonCard per drug with pagination
+  const DRUGS_PER_PAGE = 5
   const drugEntries = Array.from(byDrug.entries())
+  const [page, setPage] = useState(0)
+  const totalPages = Math.ceil(drugEntries.length / DRUGS_PER_PAGE)
+  const pagedEntries = drugEntries.slice(page * DRUGS_PER_PAGE, (page + 1) * DRUGS_PER_PAGE)
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -880,8 +891,29 @@ function DrugComparisonTable({ policies, drug }: {
           <h3 className="text-base font-bold text-slate-900">Drug Coverage Comparison</h3>
           <p className="text-xs text-slate-500 mt-0.5">{byDrug.size} drugs × {payers.length} plans · All 8 criteria</p>
         </div>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              ← Prev
+            </button>
+            <span className="text-xs text-slate-500">
+              Page {page + 1} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
-      {drugEntries.map(([name, drugPolicies]) => (
+      {pagedEntries.map(([name, drugPolicies]) => (
         <DrugComparisonTable
           key={name}
           policies={drugPolicies}
@@ -893,6 +925,27 @@ function DrugComparisonTable({ policies, drug }: {
           }}
         />
       ))}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <button
+            onClick={() => setPage(p => Math.max(0, p - 1))}
+            disabled={page === 0}
+            className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs text-slate-500">
+            Showing {page * DRUGS_PER_PAGE + 1}–{Math.min((page + 1) * DRUGS_PER_PAGE, drugEntries.length)} of {drugEntries.length} drugs
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={page >= totalPages - 1}
+            className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1243,14 +1296,15 @@ export function AIDashboard({ query }: AIDashboardProps) {
   const [loading, setLoading] = useState(true)
   const [aiLoading, setAiLoading] = useState(true)
   const [followUp, setFollowUp] = useState('')
+  const [rightPanelOpen, setRightPanelOpen] = useState(true)
 
   // Fetch from API on mount — structured data first, AI answer async
   useEffect(() => {
     const { drugIds, payerIds } = parseQueryFilters(query)
     const drugId = drugIds[0] || null
+    const isBroadQuery = query.toLowerCase().includes('all drugs') || query.toLowerCase().includes('all policies') || query.toLowerCase().includes('coverage grid')
 
     // 1) Fetch structured comparison data FAST (SQL only, <50ms)
-    //    Only fetch if we detected a specific drug in the query
     if (drugId) {
       fetchComparison(drugId, Date.now())
         .then(result => {
@@ -1264,6 +1318,14 @@ export function AIDashboard({ query }: AIDashboardProps) {
           }
         })
         .finally(() => setLoading(false))
+    } else if (isBroadQuery) {
+      // For broad 'all drugs' queries, use mock data for the matrix view
+      const allDrugs = drugs
+      const firstDrug = allDrugs[0]
+      if (firstDrug) {
+        setApiData({ drug: firstDrug, policies: payerPolicies, allPolicies: payerPolicies })
+      }
+      setLoading(false)
     } else {
       setLoading(false)
     }
@@ -1385,7 +1447,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
               <span className="text-xs font-bold text-white">Rx</span>
             </div>
             <div className="flex-1 min-w-0 space-y-2.5">
-              {/* Comparison table (if comparison query with structured data) */}
+              {/* Comparison table — only for comparison queries */}
               {isComparisonQuery(query) && comparisonPolicies && (
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
@@ -1399,21 +1461,23 @@ export function AIDashboard({ query }: AIDashboardProps) {
                 </motion.div>
               )}
 
-              {/* Answer card — show structured summary immediately, replace with AI when ready */}
-              {(!isComparisonQuery(query) || !comparisonPolicies) && (
+              {/* Answer card — only show when NOT a comparison query with data */}
+              {!(isComparisonQuery(query) && comparisonPolicies) && (
                 <div className="bg-white rounded-2xl rounded-tl-sm border border-slate-200 p-5 shadow-sm">
                   {aiResponse ? (
                     <RenderedMarkdown text={answerText} />
                   ) : aiLoading ? (
                     <div className="space-y-2">
-                      <p className="text-sm leading-relaxed text-slate-700">
-                        {dashboard.summary.split(/(\*\*.*?\*\*)/).map((part, i) => {
-                          if (part.startsWith('**') && part.endsWith('**')) {
-                            return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
-                          }
-                          return <span key={i}>{part}</span>
-                        })}
-                      </p>
+                      {dashboard.summary ? (
+                        <p className="text-sm leading-relaxed text-slate-700">
+                          {dashboard.summary.split(/(\*\*.*?\*\*)/).map((part, i) => {
+                            if (part.startsWith('**') && part.endsWith('**')) {
+                              return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
+                            }
+                            return <span key={i}>{part}</span>
+                          })}
+                        </p>
+                      ) : null}
                       <div className="flex items-center gap-2 pt-1">
                         <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
                         <span className="text-[11px] text-slate-400">Generating detailed AI analysis...</span>
@@ -1421,7 +1485,7 @@ export function AIDashboard({ query }: AIDashboardProps) {
                     </div>
                   ) : (
                     <p className="text-sm leading-relaxed text-slate-700">
-                      {dashboard.summary.split(/(\*\*.*?\*\*)/).map((part, i) => {
+                      {(dashboard.summary || 'No specific policy data found for this query.').split(/(\*\*.*?\*\*)/).map((part, i) => {
                         if (part.startsWith('**') && part.endsWith('**')) {
                           return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
                         }
@@ -1442,28 +1506,26 @@ export function AIDashboard({ query }: AIDashboardProps) {
             </div>
           </motion.div>
 
-          {/* Quick Stats — only show when we have relevant drug-specific data */}
-          {apiData && apiData.policies.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <QuickStatsWidget policies={apiData.policies} drug={apiData.drug} totalPolicies={aiResponse?.relevant_policies?.length ?? apiData.policies.length} />
-            </motion.div>
-          )}
+          {/* Quick Stats + Widgets — hide entirely for comparison queries */}
+          {!(isComparisonQuery(query) && comparisonPolicies) && (
+            <>
+              {/* Quick Stats */}
+              {apiData && apiData.policies.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  <QuickStatsWidget policies={apiData.policies} drug={apiData.drug} totalPolicies={aiResponse?.relevant_policies?.length ?? apiData.policies.length} />
+                </motion.div>
+              )}
 
-          {/* Widgets — hide redundant ones when comparison table is already shown */}
-          {dashboard.widgets
-            .filter(w => w.type !== 'quick-stats')
-            .filter(w => {
-              if (isComparisonQuery(query) && comparisonPolicies) {
-                // Comparison table already covers these
-                return !['full-matrix', 'comparison-cards', 'step-therapy-visual', 'site-of-care', 'key-insight'].includes(w.type)
-              }
-              return true
-            })
-            .map((widget, i) => renderWidget(widget, i))}
+              {/* Widgets */}
+              {dashboard.widgets
+                .filter(w => w.type !== 'quick-stats' && w.type !== 'full-matrix')
+                .map((widget, i) => renderWidget(widget, i))}
+            </>
+          )}
         </div>
 
         {/* Follow-up input (sticky bottom) */}
@@ -1488,30 +1550,51 @@ export function AIDashboard({ query }: AIDashboardProps) {
       </div>
 
       {/* ═══════ RIGHT: Policy Matches + Sources + Actions ═══════ */}
-      <div className="w-[500px] shrink-0 overflow-y-auto bg-slate-50/50 p-4 space-y-4 hidden lg:block">
-        {/* Policy Details — show from apiData immediately, upgrade to aiResponse when ready */}
-        {(aiResponse?.relevant_policies?.length || apiData?.rawPolicies?.length) ? (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <PolicyDetailCards policies={aiResponse?.relevant_policies ?? apiData?.rawPolicies ?? []} />
-          </motion.div>
-        ) : null}
+      {rightPanelOpen ? (
+        <div className="w-[500px] shrink-0 overflow-y-auto bg-slate-50/50 space-y-4 hidden lg:block relative">
+          {/* Collapse button in panel header */}
+          <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+            <span className="text-xs font-bold text-slate-600">Policy Details & Sources</span>
+            <button
+              onClick={() => setRightPanelOpen(false)}
+              className="p-1 rounded-md hover:bg-slate-200 transition-colors group" title="Collapse panel"
+            >
+              <PanelRightClose className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+            </button>
+          </div>
+          <div className="px-4 pb-4 space-y-4">
+            {/* Policy Details — show from apiData immediately, upgrade to aiResponse when ready */}
+            {(aiResponse?.relevant_policies?.length || apiData?.rawPolicies?.length) ? (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <PolicyDetailCards policies={aiResponse?.relevant_policies ?? apiData?.rawPolicies ?? []} />
+              </motion.div>
+            ) : null}
 
-        {/* Source Evidence */}
-        {aiResponse && aiResponse.sources.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <SourceEvidence sources={aiResponse.sources} policies={aiResponse.relevant_policies} />
-          </motion.div>
-        )}
-
-      </div>
+            {/* Source Evidence */}
+            {aiResponse && aiResponse.sources.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <SourceEvidence sources={aiResponse.sources} policies={aiResponse.relevant_policies} />
+              </motion.div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setRightPanelOpen(true)}
+          className="hidden lg:flex items-center justify-center w-8 shrink-0 bg-slate-50 hover:bg-slate-100 border-l border-slate-200 transition-colors group"
+          title="Expand panel"
+        >
+          <PanelRightOpen className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+        </button>
+      )}
     </div>
   )
 }
