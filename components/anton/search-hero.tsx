@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Search, Sparkles, ArrowRight } from 'lucide-react'
+import { Search, Sparkles, ArrowRight, GitCompareArrows, Target, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { VoiceOrb } from './voice-orb'
 import { useAntonStore } from '@/lib/store'
 import { soundEngine } from '@/lib/sounds'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'
 
 interface SearchHeroProps {
   onSearch?: (query: string) => void
@@ -18,6 +20,19 @@ export function SearchHero({ onSearch }: SearchHeroProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const startProcessing = useAntonStore((state) => state.startProcessing)
+  const [stats, setStats] = useState({ payers: 0, policies: 0 })
+
+  useEffect(() => {
+    fetch(`${API_BASE}/matrix`)
+      .then(r => r.json())
+      .then(data => {
+        setStats({
+          payers: data.payers?.length || 0,
+          policies: data.rows?.reduce((acc: number, row: { cells: Record<string, { has_data: boolean }> }) => acc + Object.values(row.cells).filter((c) => c.has_data).length, 0) || 0,
+        })
+      })
+      .catch(() => {})
+  }, [])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,30 +57,64 @@ export function SearchHero({ onSearch }: SearchHeroProps) {
     setQuery(selectedQuery)
   }
 
+  const suggestions = [
+    { icon: GitCompareArrows, text: 'Compare Rituximab across payers' },
+    { icon: Target, text: 'Does Cigna cover Humira?' },
+    { icon: Bell, text: 'What changed this quarter?' },
+    { icon: Sparkles, text: 'Bevacizumab step therapy details' },
+  ]
+
+  const features = [
+    {
+      icon: GitCompareArrows,
+      title: 'Cross-payer comparison',
+      desc: 'See formulary status, tier placement, and PA requirements side by side across all major plans.',
+    },
+    {
+      icon: Target,
+      title: 'Instant coverage answers',
+      desc: 'Ask in plain language. Get answers pulled directly from live payer documents — no manual searching.',
+    },
+    {
+      icon: Bell,
+      title: 'Policy change alerts',
+      desc: 'Know the moment a formulary changes. Track step therapy, quantity limits, and coverage exclusions.',
+    },
+  ]
+
   return (
     <motion.div
-      className="w-full max-w-2xl mx-auto"
+      className="w-full max-w-3xl mx-auto"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
     >
-      {/* Logo and tagline */}
+      {/* Badge */}
       <motion.div
-        className="text-center mb-10"
+        className="flex justify-center mb-6"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+      >
+        <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs font-semibold text-primary">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Real-time coverage intelligence
+        </span>
+      </motion.div>
+
+      {/* Headline */}
+      <motion.div
+        className="text-center mb-5"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <motion.div className="inline-flex items-center justify-center mb-5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
-            <Sparkles className="w-6 h-6 text-white" />
-          </div>
-        </motion.div>
-        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-3">
-          <span className="text-gradient">Anton Rx</span>
+        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.15] mb-4">
+          Drug coverage,<br />
+          <span className="text-gradient">finally clear.</span>
         </h1>
-        <p className="text-lg text-muted-foreground max-w-sm mx-auto leading-relaxed">
-          Ask anything about drug coverage. <br className="hidden sm:block" />AI does the rest.
+        <p className="text-base sm:text-lg text-muted-foreground max-w-lg mx-auto leading-relaxed">
+          Search, compare, and track formulary decisions across every major payer — powered by AI that reads the fine print for you.
         </p>
       </motion.div>
 
@@ -110,38 +159,89 @@ export function SearchHero({ onSearch }: SearchHeroProps) {
 
       {/* Query suggestions */}
       <motion.div
-        className="mt-8"
+        className="mt-6"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
+        transition={{ delay: 0.35 }}
       >
-        <p className="text-center text-xs text-muted-foreground mb-3">Try asking</p>
+        <p className="text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">Try asking</p>
         <div className="flex flex-wrap justify-center gap-2">
-          {[
-            'Compare Rituximab across payers',
-            'Does Cigna cover Humira?',
-            'What changed in policies this quarter?',
-          ].map((suggestion, index) => (
-            <motion.button
-              key={suggestion}
-              onClick={() => handleQuerySelect(suggestion)}
-              className={`
-                px-4 py-2 rounded-full text-sm transition-all duration-200
-                ${query === suggestion
-                  ? 'bg-primary text-white shadow-sm'
-                  : 'bg-white text-foreground/70 hover:bg-secondary border border-border hover:border-primary/30'
-                }
-              `}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 + index * 0.08 }}
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.97 }}
-            >
-              {suggestion}
-            </motion.button>
-          ))}
+          {suggestions.map((s, index) => {
+            const Icon = s.icon
+            return (
+              <motion.button
+                key={s.text}
+                onClick={() => handleQuerySelect(s.text)}
+                className={`
+                  inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm transition-all duration-200
+                  ${query === s.text
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-white text-foreground/70 hover:bg-secondary border border-border hover:border-primary/30'
+                  }
+                `}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 + index * 0.06 }}
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                <Icon className="w-3.5 h-3.5 opacity-50" />
+                {s.text}
+              </motion.button>
+            )
+          })}
         </div>
+      </motion.div>
+
+      {/* Stats bar */}
+      <motion.div
+        className="mt-10 flex items-center justify-center"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+      >
+        <div className="inline-flex items-center bg-white rounded-2xl border border-border soft-shadow divide-x divide-border">
+          <div className="px-8 py-4 text-center">
+            <p className="text-2xl font-bold text-primary">{stats.payers || '—'}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Payers tracked</p>
+          </div>
+          <div className="px-8 py-4 text-center">
+            <p className="text-2xl font-bold text-primary">{stats.policies || '—'}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Drug policies</p>
+          </div>
+          <div className="px-8 py-4 text-center">
+            <p className="text-2xl font-bold text-emerald-500">Live</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Coverage updates</p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Feature cards */}
+      <motion.div
+        className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-3"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+      >
+        {features.map((f, i) => {
+          const Icon = f.icon
+          return (
+            <motion.div
+              key={f.title}
+              className="bg-white rounded-2xl border border-border p-5 soft-shadow hover:border-primary/20 transition-colors"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.65 + i * 0.08 }}
+              whileHover={{ y: -2 }}
+            >
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
+                <Icon className="w-5 h-5 text-primary" />
+              </div>
+              <h3 className="text-sm font-bold text-foreground mb-1">{f.title}</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
+            </motion.div>
+          )
+        })}
       </motion.div>
     </motion.div>
   )

@@ -14,6 +14,8 @@ import {
   type Notification,
 } from '@/lib/api'
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'
+
 const navSections = [
   {
     label: 'ANALYST',
@@ -45,7 +47,7 @@ export function AppSidebar() {
   const [showNotifs, setShowNotifs] = useState(false)
 
   useEffect(() => {
-    fetch('http://localhost:8080/api/matrix')
+    fetch(`${API_BASE}/matrix`)
       .then(r => r.json())
       .then(data => {
         setApiConnected(true)

@@ -313,15 +313,11 @@ export default function PolicyBankPage() {
                             <p className="text-slate-300">{p.generic_name || '—'}</p>
                           </div>
                           <div>
-                            <p className="text-slate-500 font-medium mb-1">Document ID</p>
-                            <p className="text-slate-300 font-mono text-[10px]">{p.document_id || '—'}</p>
-                          </div>
-                          <div>
                             <p className="text-slate-500 font-medium mb-1">Source</p>
-                            <p className="text-slate-300 truncate max-w-[200px]">
+                            <p className="text-slate-300 truncate max-w-[300px]">
                               {p.source_url ? (
                                 <a href={p.source_url} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">
-                                  {new URL(p.source_url).hostname}
+                                  {(() => { try { return new URL(p.source_url).hostname } catch { return p.source_url } })()}
                                 </a>
                               ) : '—'}
                             </p>

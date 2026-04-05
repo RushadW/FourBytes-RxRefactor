@@ -4,11 +4,11 @@ import { SearchHero } from '@/components/anton/search-hero'
 export default function HomePage() {
   return (
     <AnimatedBackground>
-      <main className="min-h-screen flex flex-col items-center justify-center px-6 py-8">
+      <main className="min-h-screen flex flex-col items-center justify-start px-6 pt-16 pb-8">
         <SearchHero />
         
         {/* Subtle footer hint */}
-        <div className="mt-auto pt-8 text-center">
+        <div className="mt-12 text-center">
           <p className="text-xs text-muted-foreground/60">
             Powered by AI · Just ask a question and we handle the rest
           </p>

@@ -7,7 +7,7 @@ RUN npm ci
 
 COPY . .
 
-ENV NEXT_PUBLIC_API_URL=https://anton-rx-backend-770871054693.us-central1.run.app/api
+ENV NEXT_PUBLIC_API_URL=https://anton-rx-backend-a6czli6ybq-uc.a.run.app/api
 RUN npm run build
 
 # --- Production image ---

@@ -16,6 +16,8 @@ import type { PayerPolicy, Drug, Insight } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { PolicyMatrix } from './policy-matrix'
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'
+
 // Widget types the AI can choose to render
 type WidgetType =
   | 'ai-answer'
@@ -353,7 +355,7 @@ function PolicyChangesWidget() {
 
   useEffect(() => {
     // Fetch real version diffs from the API
-    fetch('http://localhost:8080/api/matrix')
+    fetch(`${API_BASE}/matrix`)
       .then(r => r.json())
       .then(async (matrix) => {
         const allChanges: typeof changes = []
@@ -694,9 +696,13 @@ function DrugComparisonTable({ policies, drug }: {
           return pol.step_therapy
             ? { text: '✓ Required', badge: 'text-violet-700 bg-violet-50 border-violet-200' }
             : { text: '✗ Not Required', style: 'text-slate-400' }
-        case 'st_details':
+        case 'st_details': {
           if (!pol.step_therapy) return { text: 'N/A — No step therapy required', style: 'text-slate-400 italic text-[11px]' }
-          return { text: pol.step_therapy_details || 'Details not available', style: 'text-slate-700 text-[11px] leading-snug' }
+          const stText = pol.step_therapy_details || 'Details not available'
+          const steps = stText.split(/(?=Step\s*\d)/i).map(s => s.trim()).filter(Boolean)
+          if (steps.length > 1) return { text: stText, style: 'text-slate-700 text-[11px] leading-snug', list: steps }
+          return { text: stText, style: 'text-slate-700 text-[11px] leading-snug' }
+        }
         case 'soc': {
           const sites = pol.site_of_care
           if (!sites || sites.length === 0) return { text: 'No restrictions', style: 'text-slate-400 italic' }
@@ -722,6 +728,18 @@ function DrugComparisonTable({ policies, drug }: {
             <span className={cn('w-2 h-2 rounded-full', val.dot)} />
             <span className="text-slate-600 text-xs">{val.text}</span>
           </div>
+        )
+      }
+      if ('list' in val && val.list) {
+        return (
+          <ul className="space-y-1">
+            {(val.list as string[]).map((item, j) => (
+              <li key={j} className="flex items-start gap-1.5 text-[11px] leading-snug text-slate-700">
+                <span className="mt-1.5 w-1 h-1 rounded-full bg-violet-400 flex-shrink-0" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
         )
       }
       return <span className={cn('text-xs', val.style)}>{val.text}</span>
@@ -1496,13 +1514,6 @@ export function AIDashboard({ query }: AIDashboardProps) {
                 </div>
               )}
 
-              {/* Tier / cost badge */}
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  {aiResponse ? 'Tier 2 — Claude AI RAG · ~$0.01' : aiLoading ? 'Fetching AI analysis...' : 'Tier 1 — Structured DB · No LLM call · $0.00'}
-                </span>
-              </div>
             </div>
           </motion.div>
 
