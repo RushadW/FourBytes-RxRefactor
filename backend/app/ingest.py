@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.database import PolicyRecord, DocumentRecord, PolicyVersionRecord
 from app.storage import get_storage
-from app.parsers import parse_pdf, parse_pdf_bytes, parse_html, extract_fields
+from app.parsers import parse_pdf, parse_pdf_bytes, parse_html, extract_fields_with_claude
 from app.rag import index_policy
 
 
@@ -143,7 +143,8 @@ def ingest_file(
     else:
         parsed = parse_html(content.decode("utf-8", errors="replace"))
 
-    extracted = extract_fields(parsed)
+    # Use Claude-powered extraction (with regex fallback)
+    extracted = extract_fields_with_claude(parsed, drug_hint=drug_id, payer_hint=payer_name)
 
     # Create document record
     doc_id = str(uuid.uuid4())
@@ -160,17 +161,30 @@ def ingest_file(
     )
     db.add(doc)
 
-    # Build policy data (merge extracted fields with any provided overrides)
+    # Build policy data from Claude extraction (all fields populated)
     policy_data = {
         "drug_id": drug_id,
-        "drug_name": drug_name,
+        "drug_name": extracted.get("drug_name") or drug_name,
+        "generic_name": extracted.get("generic_name") or "",
+        "drug_category": extracted.get("drug_category") or "",
+        "therapeutic_area": extracted.get("therapeutic_area") or "",
         "payer_id": payer_id,
         "payer_name": payer_name,
-        "policy_title": parsed.title,
-        "covered": True,
+        "policy_title": extracted.get("policy_title") or parsed.title,
+        "covered": extracted.get("covered", True),
+        "access_status": extracted.get("access_status") or "",
+        "preferred_count": extracted.get("preferred_count") or 0,
+        "covered_indications": extracted.get("covered_indications") or [],
         "prior_auth": extracted.get("prior_auth", False),
+        "prior_auth_details": extracted.get("prior_auth_details") or "",
         "step_therapy": extracted.get("step_therapy", False),
-        "site_of_care": extracted.get("site_of_care", []),
+        "step_therapy_details": extracted.get("step_therapy_details") or "",
+        "site_of_care": extracted.get("site_of_care") or [],
+        "dosing_limits": extracted.get("dosing_limits") or "",
+        "coverage_criteria": extracted.get("coverage_criteria") or [],
+        "effective_date": extracted.get("effective_date") or "",
+        "last_updated": datetime.utcnow().strftime("%Y-%m-%d"),
+        "confidence": extracted.get("confidence") or "medium",
         "raw_text": parsed.full_text,
         "document_id": doc_id,
     }

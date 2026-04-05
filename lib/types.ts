@@ -78,6 +78,7 @@ export interface Insight {
 export interface ComparisonResult {
   drug: Drug
   policies: PayerPolicy[]
+  rawPolicies?: import('@/lib/api').ApiPolicy[]
   aiSummary: string
   insights: Insight[]
   lastUpdated: string

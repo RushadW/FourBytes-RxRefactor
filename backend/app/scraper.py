@@ -136,9 +136,32 @@ def _hash_content(content: bytes) -> str:
 def _guess_drug_from_text(text: str, targets: list[str]) -> str:
     """Try to match a target drug name from a URL or title string."""
     lower = text.lower()
+    # Expanded aliases: brand name -> generic drug_id
+    _BRAND_TO_GENERIC = {
+        "rituxan": "rituximab", "riabni": "rituximab", "ruxience": "rituximab", "truxima": "rituximab",
+        "humira": "adalimumab", "hadlima": "adalimumab", "hyrimoz": "adalimumab",
+        "avastin": "bevacizumab", "mvasi": "bevacizumab", "zirabev": "bevacizumab",
+        "remicade": "infliximab", "inflectra": "infliximab", "renflexis": "infliximab", "avsola": "infliximab",
+        "botox": "botulinum", "dysport": "botulinum", "xeomin": "botulinum", "myobloc": "botulinum",
+        "prolia": "denosumab", "xgeva": "denosumab",
+        "herceptin": "trastuzumab", "ogivri": "trastuzumab", "herzuma": "trastuzumab",
+        "keytruda": "pembrolizumab",
+        "opdivo": "nivolumab",
+        "ocrevus": "ocrelizumab",
+        "tysabri": "natalizumab",
+        "stelara": "ustekinumab",
+        "entyvio": "vedolizumab",
+        "dupixent": "dupilumab",
+        "cosentyx": "secukinumab",
+    }
+    # First check direct drug name match
     for drug in targets:
         if drug.lower() in lower:
             return drug.lower()
+    # Then check brand names
+    for brand, generic in _BRAND_TO_GENERIC.items():
+        if brand in lower and generic in [t.lower() for t in targets]:
+            return generic
     return ""
 
 
@@ -258,7 +281,7 @@ def _scrape_index_page_pdf(source: PayerSource) -> list[FetchedDocument]:
 # ============================================================
 
 def _scrape_direct_pdf(source: PayerSource) -> list[FetchedDocument]:
-    """Download PDFs from direct URLs."""
+    """Download PDFs from direct URLs. For comprehensive docs, split by target drug."""
     docs: list[FetchedDocument] = []
 
     for url in source.direct_urls:
@@ -280,21 +303,46 @@ def _scrape_direct_pdf(source: PayerSource) -> list[FetchedDocument]:
                     logger.warning(f"[{source.payer_id}] Non-PDF content from {url}, skipping")
                     continue
 
-            doc = FetchedDocument(
-                payer_id=source.payer_id,
-                payer_name=source.payer_name,
-                source_url=url,
-                filename=_sanitize_filename(url, source.payer_id),
-                content=content,
-                content_type="pdf",
-                file_hash=_hash_content(content),
-                fetched_at=datetime.utcnow(),
-                title=f"{source.payer_name} Medical Drug Policy",
-                drug_hint="",  # Comprehensive doc — covers multiple drugs
-                metadata={"comprehensive": True},
-            )
-            docs.append(doc)
-            logger.info(f"[{source.payer_id}] Downloaded {len(content)} bytes")
+            # Try to split comprehensive PDF into per-drug documents
+            per_drug = _split_comprehensive_pdf(content, source)
+            if per_drug:
+                for drug_id, drug_text in per_drug.items():
+                    # Store only the extracted section text (not the full 4MB PDF)
+                    # so ingest_file parses/indexes just the relevant section
+                    section_bytes = drug_text.encode("utf-8")
+                    doc = FetchedDocument(
+                        payer_id=source.payer_id,
+                        payer_name=source.payer_name,
+                        source_url=url,
+                        filename=f"{source.payer_id}_{drug_id}_policy.txt",
+                        content=section_bytes,
+                        content_type="html",  # parse_html handles plain text too
+                        file_hash=_hash_content(section_bytes),
+                        fetched_at=datetime.utcnow(),
+                        title=f"{source.payer_name} — {drug_id.title()} Policy",
+                        drug_hint=drug_id,
+                        metadata={"comprehensive": True, "extracted_section": True,
+                                  "section_chars": len(drug_text)},
+                    )
+                    docs.append(doc)
+                logger.info(f"[{source.payer_id}] Split comprehensive PDF into {len(per_drug)} drug sections: {list(per_drug.keys())}")
+            else:
+                # Fallback: store as a single comprehensive doc
+                doc = FetchedDocument(
+                    payer_id=source.payer_id,
+                    payer_name=source.payer_name,
+                    source_url=url,
+                    filename=_sanitize_filename(url, source.payer_id),
+                    content=content,
+                    content_type="pdf",
+                    file_hash=_hash_content(content),
+                    fetched_at=datetime.utcnow(),
+                    title=f"{source.payer_name} Medical Drug Policy",
+                    drug_hint="",
+                    metadata={"comprehensive": True},
+                )
+                docs.append(doc)
+                logger.info(f"[{source.payer_id}] Downloaded {len(content)} bytes (single doc, could not split)")
 
         except Exception as e:
             logger.warning(f"[{source.payer_id}] Failed to download {url}: {e}")
@@ -302,6 +350,94 @@ def _scrape_direct_pdf(source: PayerSource) -> list[FetchedDocument]:
         time.sleep(REQUEST_DELAY)
 
     return docs
+
+
+def _split_comprehensive_pdf(content: bytes, source: PayerSource) -> dict[str, str] | None:
+    """Parse a comprehensive PDF and extract sections for each target drug.
+
+    Returns {drug_id: section_text} or None if splitting fails.
+    """
+    try:
+        from app.parsers import parse_pdf_bytes
+        parsed = parse_pdf_bytes(content)
+        full_text = parsed.full_text
+        if not full_text or len(full_text) < 500:
+            return None
+
+        # Build a regex that finds drug names (generic + brand)
+        drug_aliases: dict[str, list[str]] = {
+            "rituximab": ["rituximab", "rituxan", "riabni", "ruxience", "truxima"],
+            "adalimumab": ["adalimumab", "humira", "hadlima", "hyrimoz", "cyltezo"],
+            "bevacizumab": ["bevacizumab", "avastin", "mvasi", "zirabev"],
+            "infliximab": ["infliximab", "remicade", "inflectra", "renflexis", "avsola"],
+            "botulinum": ["botulinum", "botox", "dysport", "xeomin", "myobloc"],
+            "denosumab": ["denosumab", "prolia", "xgeva"],
+            "trastuzumab": ["trastuzumab", "herceptin", "ogivri", "herzuma", "kanjinti"],
+            "pembrolizumab": ["pembrolizumab", "keytruda"],
+            "nivolumab": ["nivolumab", "opdivo"],
+            "ocrelizumab": ["ocrelizumab", "ocrevus"],
+            "natalizumab": ["natalizumab", "tysabri"],
+            "ustekinumab": ["ustekinumab", "stelara"],
+            "vedolizumab": ["vedolizumab", "entyvio"],
+            "dupilumab": ["dupilumab", "dupixent"],
+            "secukinumab": ["secukinumab", "cosentyx"],
+        }
+
+        # Only look for drugs that are in this source's target list
+        target_set = set(source.target_drugs) if source.target_drugs else set(drug_aliases.keys())
+
+        text_lower = full_text.lower()
+        results: dict[str, str] = {}
+
+        for drug_id, aliases in drug_aliases.items():
+            if drug_id not in target_set and not any(a in target_set for a in aliases):
+                continue
+
+            # Find all positions where this drug is mentioned
+            positions: list[int] = []
+            for alias in aliases:
+                start = 0
+                while True:
+                    idx = text_lower.find(alias.lower(), start)
+                    if idx == -1:
+                        break
+                    positions.append(idx)
+                    start = idx + len(alias)
+
+            if not positions:
+                continue
+
+            # Extract context around mentions — gather up to 3000 chars around each mention
+            sections: list[str] = []
+            for pos in sorted(set(positions)):
+                start = max(0, pos - 500)
+                end = min(len(full_text), pos + 2500)
+                sections.append(full_text[start:end])
+
+            # Deduplicate overlapping sections
+            if sections:
+                merged = sections[0]
+                for s in sections[1:]:
+                    # Only add if it doesn't overlap significantly
+                    overlap = len(set(merged[-200:]) & set(s[:200]))
+                    if overlap < 100:
+                        merged += "\n\n---\n\n" + s
+                    elif len(merged) < 8000:
+                        merged += "\n\n---\n\n" + s
+
+                # Only keep if we have meaningful content (>200 chars of real drug-related text)
+                drug_mention_count = sum(text_lower.count(a.lower()) for a in aliases)
+                if drug_mention_count >= 2 and len(merged) > 200:
+                    results[drug_id] = merged[:12000]  # Cap at 12K chars
+
+        if results:
+            logger.info(f"[{source.payer_id}] Split PDF into {len(results)} drug sections")
+            return results
+
+    except Exception as e:
+        logger.warning(f"[{source.payer_id}] Failed to split comprehensive PDF: {e}")
+
+    return None
 
 
 # ============================================================
@@ -374,6 +510,95 @@ def _scrape_search_portal(source: PayerSource) -> list[FetchedDocument]:
 
 
 # ============================================================
+# Strategy: web_page_content
+# Fetch HTML policy pages directly (e.g. Aetna CPBs).
+# Each page is a standalone policy document for one drug.
+# ============================================================
+
+def _scrape_web_page_content(source: PayerSource) -> list[FetchedDocument]:
+    """Fetch HTML policy pages and return their content for Claude extraction."""
+    docs: list[FetchedDocument] = []
+
+    if not source.page_urls:
+        logger.warning(f"[{source.payer_id}] No page_urls configured for web_page_content strategy")
+        return docs
+
+    for drug_hint, url in source.page_urls.items():
+        try:
+            logger.info(f"[{source.payer_id}] Fetching policy page for '{drug_hint}': {url}")
+            resp = _fetch_url(url, timeout=60)
+
+            if resp.status_code != 200:
+                logger.warning(f"[{source.payer_id}] HTTP {resp.status_code} for {url}")
+                continue
+
+            content = resp.content
+            text = resp.text
+
+            # If the page is JS-rendered with no useful content, skip it
+            soup = BeautifulSoup(text, "lxml")
+
+            # Remove navigation, scripts, headers, footers
+            for tag in soup(["script", "style", "nav", "footer", "header", "noscript", "iframe"]):
+                tag.decompose()
+
+            # Try to extract main content using the configured selector
+            main_content = None
+            if source.content_selector:
+                for selector in source.content_selector.split(","):
+                    selector = selector.strip()
+                    found = soup.select_one(selector)
+                    if found and len(found.get_text(strip=True)) > 200:
+                        main_content = found
+                        break
+
+            if main_content is None:
+                # Fallback to body
+                main_content = soup.find("body") or soup
+
+            # Get clean text for quick size check
+            clean_text = main_content.get_text(separator="\n", strip=True)
+            if len(clean_text) < 100:
+                logger.warning(f"[{source.payer_id}] Page content too short ({len(clean_text)} chars) for {url} — may be JS-rendered")
+                continue
+
+            # Store the cleaned HTML
+            clean_html = str(main_content).encode("utf-8")
+
+            # Extract title
+            title_tag = soup.find("title")
+            title = title_tag.string.strip() if title_tag and title_tag.string else ""
+            h1 = soup.find("h1")
+            if not title and h1:
+                title = h1.get_text(strip=True)
+
+            doc = FetchedDocument(
+                payer_id=source.payer_id,
+                payer_name=source.payer_name,
+                source_url=url,
+                filename=f"{source.payer_id}_{drug_hint}_policy.html",
+                content=clean_html,
+                content_type="html",
+                file_hash=_hash_content(clean_html),
+                fetched_at=datetime.utcnow(),
+                title=title or f"{source.payer_name} — {drug_hint.title()} Policy",
+                drug_hint=drug_hint,
+                metadata={"char_count": len(clean_text), "strategy": "web_page_content"},
+            )
+            docs.append(doc)
+            logger.info(
+                f"[{source.payer_id}] Fetched {len(clean_text)} chars for '{drug_hint}' — title: {title[:80]}"
+            )
+
+        except Exception as e:
+            logger.warning(f"[{source.payer_id}] Failed to fetch {url}: {e}")
+
+        time.sleep(REQUEST_DELAY)
+
+    return docs
+
+
+# ============================================================
 # Dispatcher
 # ============================================================
 
@@ -381,6 +606,7 @@ STRATEGY_MAP = {
     "index_page_pdf": _scrape_index_page_pdf,
     "direct_pdf": _scrape_direct_pdf,
     "search_portal": _scrape_search_portal,
+    "web_page_content": _scrape_web_page_content,
 }
 
 

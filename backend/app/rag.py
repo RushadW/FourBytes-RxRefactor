@@ -122,6 +122,11 @@ def chunk_policy_text(
 def index_policy(policy_id: str, drug_id: str, payer_id: str, text: str):
     """Chunk and index a policy's text into ChromaDB."""
     collection = get_collection()
+
+    # Limit text to 50K chars to avoid memory issues with comprehensive PDFs
+    if len(text) > 50000:
+        text = text[:50000]
+
     chunks = chunk_policy_text(text, policy_id, drug_id, payer_id)
     if not chunks:
         return
@@ -134,11 +139,15 @@ def index_policy(policy_id: str, drug_id: str, payer_id: str, text: str):
     except Exception:
         pass
 
-    collection.add(
-        ids=[c["id"] for c in chunks],
-        documents=[c["text"] for c in chunks],
-        metadatas=[c["metadata"] for c in chunks],
-    )
+    # Add in batches to avoid ONNX embedding OOM/segfault
+    BATCH_SIZE = 50
+    for i in range(0, len(chunks), BATCH_SIZE):
+        batch = chunks[i:i + BATCH_SIZE]
+        collection.add(
+            ids=[c["id"] for c in batch],
+            documents=[c["text"] for c in batch],
+            metadatas=[c["metadata"] for c in batch],
+        )
 
 
 # ---------- Search ----------
@@ -200,7 +209,7 @@ RULES:
 - If the data is insufficient, say so clearly rather than guessing.
 - Include specific clinical criteria, diagnoses, and requirements when available.
 - Mention effective dates and policy titles when relevant.
-- Keep responses under 400 words unless the question requires more detail."""
+- Keep responses under 300 words. Be direct and actionable."""
 
 
 def _build_context(chunks: list[dict], policies: list[dict]) -> str:
@@ -233,7 +242,7 @@ def _build_context(chunks: list[dict], policies: list[dict]) -> str:
     # Vector-retrieved document excerpts
     if chunks:
         parts.append("\n## Relevant Policy Document Excerpts\n")
-        for i, c in enumerate(chunks[:5], 1):
+        for i, c in enumerate(chunks[:3], 1):
             meta = c.get("metadata", {})
             source = f"{meta.get('payer_id', '?')}/{meta.get('drug_id', '?')}"
             score = c.get("score", 0)
@@ -259,7 +268,7 @@ def generate_answer(question: str, chunks: list[dict], policies: list[dict]) -> 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-3-haiku-20240307",
             max_tokens=800,
             system=SYSTEM_PROMPT,
             messages=[
