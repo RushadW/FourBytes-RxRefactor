@@ -1,4 +1,4 @@
-@startuml Medical Benefit Drug Policy Tracker - MLOps Architecture
+@startuml AntonRx - Medical Benefit Drug Policy Tracker v2.0
 
 !theme plain
 skinparam backgroundColor #FFFFFF
@@ -33,7 +33,7 @@ skinparam note {
   FontSize 10
 }
 
-title <b>Medical Benefit Drug Policy Tracker — MLOps Architecture</b>
+title <b>AntonRx — Medical Benefit Drug Policy Tracker v2.0</b>
 
 ' ══════════════════════════════════════════════════════════════
 ' ACTORS
@@ -42,134 +42,192 @@ actor "Policy Analyst" as analyst
 actor "ML Engineer"    as mleng
 
 ' ══════════════════════════════════════════════════════════════
-' FRONTEND
+' FRONTEND  (Streamlit :8501)
 ' ══════════════════════════════════════════════════════════════
 package "Frontend  (Streamlit :8501)" #EBF5FB {
-  component "App Tabs\n──────────────────────────\nUpload | Ask AI | Coverage Grid\nCompare Plans | Change Tracker" as app_tabs
-  component "MLOps Dashboard\n──────────────────────────\nLLM Cost & Latency charts\nExtraction Quality badges\nDrift Alert feed\nCorrections review\nA/B Test results\nPrompt Manager" as mlops_dashboard
+  component "Upload Tab\n──────────────────────────\nfile + plan_name + payer\ndoc_type (clinical_policy |\n  dqm_policy | formulary_book)\ndrug hint | benefit_side\n→ POST /ingest/upload\n→ POST /ingest/process/{id}" as tab_upload
+
+  component "Ask AI Tab\n──────────────────────────\nNatural language question\nOptional: filter by plans\n→ POST /query/ask\nShows: answer + tier caption\n  🗃 Tier 1 | ⚡ Tier 2 | 🔍 Tier 3\n  Cost badge per response" as tab_ask
+
+  component "Compare Plans Tab\n──────────────────────────\nDrug across all plans:\n  Benefit Side (first col)\n  Completeness badge 🟢🟡🔴\n  benefit_side_note warning\nTwo-plan diff:\n  benefit_side row highlighted\n→ GET /compare/drug/{name}\n→ GET /compare/plans" as tab_compare
+
+  component "Coverage Grid | Change Tracker\n──────────────────────────\nFiltered matrix: drug × plan\nbenefit_side + tier + PA\nField-level change log\n→ GET /query/all_coverage\n→ GET /compare/changes" as tab_other
+
+  component "MLOps Dashboard\n──────────────────────────\nLLM Cost & Latency charts\nExtraction Quality badges\nDrift Alert feed\nCorrections review\nA/B Test results\nPrompt Registry manager\nCache stats\nRe-extraction job queue" as mlops_dashboard
 }
 
-analyst  --> app_tabs
+analyst  --> tab_upload
+analyst  --> tab_ask
+analyst  --> tab_compare
+analyst  --> tab_other
 mleng    --> mlops_dashboard
 
 ' ══════════════════════════════════════════════════════════════
-' API LAYER
+' API LAYER  (FastAPI :8000)
 ' ══════════════════════════════════════════════════════════════
 package "API Layer  (FastAPI :8000)" #EBF5FB {
-  component "/ingest\n/query\n/compare\n/policies" as core_api
-  component "/mlops/prompts\n/mlops/observability\n/mlops/quality\n/mlops/drift\n/mlops/corrections\n/mlops/cache\n/mlops/reextract\n/mlops/ab_tests" as mlops_api
+  component "Core Routers\n────────────────────\nPOST /ingest/upload\nPOST /ingest/process/{id}\nPOST /query/ask\nGET  /query/coverage\nGET  /query/all_coverage\nGET  /compare/drug/{name}\nGET  /compare/plans\nGET  /compare/changes\nGET  /policies/plans\nGET  /policies/documents" as core_api
+
+  component "MLOps Routers\n────────────────────\nGET|POST /mlops/prompts\nPUT /mlops/prompts/{id}/promote\nGET /mlops/observability/summary\nGET /mlops/quality/scores\nGET /mlops/drift/events\nPOST /mlops/corrections\nGET /mlops/cache/stats\nPOST /mlops/reextraction/queue\nPUT /mlops/reextraction/run-next\nPOST /mlops/ab_tests" as mlops_api
 }
 
-app_tabs       --> core_api   : HTTP REST
+tab_upload   --> core_api   : HTTP REST
+tab_ask      --> core_api   : HTTP REST
+tab_compare  --> core_api   : HTTP REST
+tab_other    --> core_api   : HTTP REST
 mlops_dashboard --> mlops_api : HTTP REST
+
+note right of core_api
+  startup hook:
+  init_db() → create_all()
+  seed_default_prompts()
+  seed EmbeddingModelVersion
+  (migration already applied
+  v2 prompts as production)
+end note
+
+' ══════════════════════════════════════════════════════════════
+' INGESTION PIPELINE
+' ══════════════════════════════════════════════════════════════
+package "Ingestion Pipeline  (ingestion_pipeline.py)" #E9F7EF {
+
+  component "Step 1 — PDF Parser\n(pdf_parser.py / pdfplumber)\n──────────────────────────\npdfplumber → [{page_num, text}]\nget_full_text() → single string\nchunk_pages():\n  CHUNK_SIZE = 3200 chars\n  CHUNK_OVERLAP = 400 chars\n  majority-vote page tracking\n→ chunks for ChromaDB\n→ full_text for extraction" as pdf_parser
+
+  component "Step 1b — Formulary Truncation\n(claude_extractor.get_relevant_text)\n──────────────────────────────────\ndoc_type == formulary_book:\n  scan lines for drug_hint\n  return ±2–5 lines per hit\n  240-page book → ~50 lines\nOther doc types: full text\n(prevents token bloat)" as formulary_filter
+
+  component "Step 2 — Claude Extractor\n(claude_extractor.py)\n──────────────────────────\nbatch_text_for_extraction()\n  60,000 chars per batch\nload prompt v2.0 from registry:\n  payer | drug | doc_type\n  benefit_side context vars\nformat_map(defaultdict) →\n  unknown placeholders → \"\"\nJSON retry on decode error\ndeduplicate by generic_name" as extractor
+
+  component "Step 3 — ChromaDB Embedder\n(embeddings.py)\n──────────────────────────\nDefaultEmbeddingFunction\n(sentence-transformers/\n  all-MiniLM-L6-v2, 384-dim)\ncosine similarity space\ndelete old chunks first\nchroma_id = doc{id}_chunk{i}\nmetadata: plan_id, plan_name,\n  quarter, page_number" as embedder
+
+  component "Step 4 — Structured Write\n(crud.py)\n──────────────────────────\nget_or_create_drug()\nchange detection vs prior\nupsert_coverage_policy()\n  + benefit_side\n  + data_completeness\n  + benefit_side_note\nadd_prior_auth_criteria()\nadd_step_therapy()\nupsert_quantity_limit()       ← NEW\nupsert_step_therapy_by_indication() ← NEW" as structured_write
+
+  component "Ingestion\nOrchestrator\n──────────────\nReads doc.doc_type\ndoc.drug_hint\ndoc.benefit_side_hint\nWires steps 1–5\nStores prompt_version_id\non every CoveragePolicy\nCalls Hook B + Hook C" as pipeline
+
+  core_api --> pipeline : document_id
+  pipeline --> pdf_parser
+  pdf_parser --> formulary_filter : full_text\n+ doc_type + drug_hint
+  formulary_filter --> extractor : relevant_text
+  extractor --> embedder : original chunks\n(full doc, not truncated)
+  extractor --> structured_write : drugs[] JSON
+  embedder --> structured_write : chroma_ids
+}
 
 ' ══════════════════════════════════════════════════════════════
 ' [1] PROMPT REGISTRY  ← MLOps
 ' ══════════════════════════════════════════════════════════════
-package "① Prompt Registry" #FEF9E7 {
-  component "Prompt Version Store\n────────────────────────\nprompt_name | version_tag\nstatus: draft→staging→prod\nsystem_prompt | user_prompt\ndeployed_at | notes" as prompt_registry
+package "① Prompt Registry  (prompt_registry.py)" #FEF9E7 {
+  component "Prompt Version Store\n────────────────────────\nprompt_name | version_tag\nstatus: draft→staging→prod→archived\nsystem_prompt | user_prompt\npromoted_at | notes\n─────────────────────────\nCurrent production:\nextraction_system v2.0\nextraction_user   v2.0\nrag_system        v1.0\nintent_system     v1.0" as prompt_registry
 
-  component "Promotion Workflow\n────────────────────────\ndraft → staging → production\nrollback to prior version\nquality gate check before\npromotion" as prompt_promote
+  component "Promotion Workflow\n────────────────────────\ndraft → staging → production\nOld production → archived\nauto-queues ReextractionJob\nfor all complete/low_quality\ndocuments" as prompt_promote
 
-  prompt_registry --> prompt_promote : lifecycle\nmanagement
+  prompt_registry --> prompt_promote : lifecycle
 }
+
+extractor --> prompt_registry : get_active_prompt(\n  \"extraction_system\"\n  \"extraction_user\")\nat call time
 
 note right of prompt_registry
-  All hardcoded strings removed.
-  Every Claude call loads
-  the active production prompt
-  by name at call time.
+  v2.0 user template injects:
+  {payer}, {drug}, {doc_type},
+  {benefit_side}, {document_text}
+  via format_map(defaultdict)
+  Schema demands per-indication
+  step therapy + source evidence
 end note
-
-' ══════════════════════════════════════════════════════════════
-' INGESTION PIPELINE (with MLOps hooks)
-' ══════════════════════════════════════════════════════════════
-package "Ingestion Pipeline  (with MLOps hooks)" #E9F7EF {
-  component "Pre-extraction\nValidator\n──────────────\nFile parseable?\nText non-empty?\nMin chars check" as pre_validator
-
-  component "PDF Parser\n(pdfplumber)\n──────────────\nPage text + tables\n800-tok chunks\n100-tok overlap" as pdf_parser
-
-  component "Claude Extractor\n(reads from Prompt Registry)\n──────────────────────────────\nActive production prompt fetched\nfrom prompt_versions table\nBatch by 60k chars\nJSON retry on failure" as extractor
-
-  component "Post-extraction\nValidator  ②\n──────────────────\nSchema completeness score\nRequired field presence\nEnum validity check\nPA/step consistency\nFlags anomalies" as post_validator
-
-  component "Ingestion\nOrchestrator\n──────────────\nWires steps 1–5\nStores prompt_version_id\non every CoveragePolicy\nCalls drift detector\nInvalidates query cache" as pipeline
-
-  core_api --> pipeline
-  pipeline --> pre_validator
-  pre_validator --> pdf_parser
-  pdf_parser --> extractor
-  extractor --> post_validator
-}
-
-extractor --> prompt_registry : fetch active\nproduction prompt
 
 ' ══════════════════════════════════════════════════════════════
 ' [2] LLM OBSERVABILITY  ← MLOps
 ' ══════════════════════════════════════════════════════════════
 package "② LLM Observability  (llm_logger.py)" #FDEDEC {
-  component "tracked_call() wrapper\n────────────────────────────\ncall_type | model | prompt_version_id\ninput_tokens | output_tokens\nlatency_ms | cost_usd\nstop_reason | error\n→ appends to llm_call_log" as llm_logger
-
-  note right of llm_logger
-    Every client.messages.create()
-    call routes through here.
-    Computes cost:
-    input × $3/M + output × $15/M
-    (claude-sonnet-4-6 pricing)
-  end note
+  component "tracked_call() wrapper\n────────────────────────────\nWraps client.messages.create()\ncall_type: extraction |\n  extraction_retry | intent |\n  rag_generation\nRecords: input_tokens,\n  output_tokens, latency_ms\nComputes cost in-process:\n  sonnet-4-6: $3/M in, $15/M out\nWrites to separate DB session\n(always commits, even on error)" as llm_logger
 }
 
-extractor --> llm_logger : all extraction calls
-' (RAG also connects below)
+extractor  --> llm_logger : every extraction call
+' RAG engine also routes through (shown below)
 
 ' ══════════════════════════════════════════════════════════════
-' CLAUDE AI LAYER
+' CLAUDE AI
 ' ══════════════════════════════════════════════════════════════
-package "AI Layer  (Anthropic SDK)" #E8F4FD {
-  component "Claude claude-sonnet-4-6\n────────────────────────────\nExtraction  →  JSON drug data\nIntent extraction  →  query type\nRAG generation  →  cited answer" as claude
-
-  component "RAG Engine\n(claude_rag.py)\n────────────────\n① Cache lookup\n② Intent extract\n③ SQL pre-filter\n④ Vector search\n⑤ Augmented gen\n⑥ RAG evaluation\n⑦ Cache store" as rag_engine
+package "AI Layer  (Anthropic SDK — claude-sonnet-4-6)" #E8F4FD {
+  component "Claude API\n────────────────────────────\ncall_type=extraction:\n  JSON drug schema per batch\n  indication-specific step therapy\n  source_page + source_text\n  benefit_side + data_completeness\ncall_type=intent:\n  {drug_name, plan_names, query_type}\ncall_type=rag_generation:\n  cited prose answer\ncall_type=extraction_retry:\n  JSON correction on decode fail" as claude
 }
 
-llm_logger --> claude : all API calls\n(logged transparently)
-core_api --> rag_engine : /query/ask
-rag_engine --> prompt_registry : fetch active\nRAG prompt
-rag_engine --> llm_logger : intent + gen calls
+llm_logger --> claude : all API calls\n(transparent wrapper)
 
 ' ══════════════════════════════════════════════════════════════
-' [3] EXTRACTION QUALITY EVALUATOR  ← MLOps
+' QUERY ROUTING TIERS  ← NEW IN V2
+' ══════════════════════════════════════════════════════════════
+package "Three-Tier Query Router  (routers/query.py + claude_rag.py)" #EBF5FB {
+
+  component "Layer 0 — Semantic Cache\n(query_cache_service.py)\n──────────────────────────\nKey: SHA256(q.lower()\n  + sorted_plan_ids)[:32]\nCheck: invalidated=False\n  AND expires_at > now\nHit: return immediately\n  routing_tier=tier_1_structured\n  source_cost=$0.00\n  0 Claude calls" as cache_check
+
+  component "Layer 1 — Intent Extraction\n(claude_rag.extract_intent)\n──────────────────────────\nClaude call_type=intent\n→ {drug_name, plan_names,\n   query_type}\nquery_type:\n  coverage_check | prior_auth\n  step_therapy | comparison\n  change_history | general" as intent_layer
+
+  component "Layer 2 — SQL Pre-filter\n(crud.get_coverage_for_drug)\n──────────────────────────\nDrug lookup: ilike match\nJOIN: CoveragePolicy\n  + HealthPlan + Drug\n  + PolicyDocument\nReturns: benefit_side,\n  data_completeness,\n  benefit_side_note,\n  PA criteria list,\n  step therapy drugs list" as sql_filter
+
+  component "route_query() Decision\n(claude_rag.route_query)\n──────────────────────────\nTier 1 if:\n  query_type in {coverage_check,\n    prior_auth, step_therapy}\n  AND drug_name present\n  AND structured_rows not empty\nTier 2 if:\n  structured_rows not empty\nTier 3: otherwise" as router
+
+  component "Tier 1 — Structured Answer\n(_build_tier1_answer)\n──────────────────────────\nNo ChromaDB call\nNo Claude generation call\nRenders human-readable prose:\n  coverage status, benefit side,\n  PA criteria, step therapy,\n  quantity limit, source note\nsource_cost = $0.00\nrouting_tier = tier_1_structured" as tier1
+
+  component "Tier 2 — Structured Synthesis\n(claude_rag.generate_answer_from_structured)\n──────────────────────────\nNo ChromaDB call\nClaude call with DB records\nvector_context = '(DB only)'\nCost read from llm_call_log\nrouting_tier = tier_2_synthesis" as tier2
+
+  component "Tier 3 — Full RAG\n(embeddings + claude_rag.generate_answer)\n──────────────────────────\nChromaDB.query():\n  cosine similarity top-5\n  plan_id $in filter\nformat_structured_context()\n  includes benefit_side per row\nformat_vector_context()\nClaude generation call\nrouting_tier = tier_3_rag" as tier3
+
+  cache_check --> intent_layer : cache MISS
+  intent_layer --> sql_filter
+  sql_filter --> router
+  router --> tier1 : tier_1
+  router --> tier2 : tier_2
+  router --> tier3 : tier_3
+}
+
+core_api --> cache_check : POST /query/ask
+tier2 --> llm_logger : rag_generation call
+tier3 --> llm_logger : rag_generation call
+intent_layer --> llm_logger : intent call
+tier3 --> embedder : similarity_search()
+
+note bottom of tier1
+  Demo query:
+  "Does Florida Blue require
+  step therapy for adalimumab?"
+  → Tier 1, $0.00, <50ms
+end note
+
+' ══════════════════════════════════════════════════════════════
+' [3] EXTRACTION QUALITY  ← MLOps
 ' ══════════════════════════════════════════════════════════════
 package "③ Extraction Quality  (extraction_evaluator.py)" #E9F7EF {
-  component "Quality Scorer\n──────────────────────────────\nschema_completeness_avg  0–1\nrequired_fields_pass_rate 0–1\nenum_validity_rate        0–1\nanomaly_count\n─────────────────────────\nIf completeness < 0.5:\n  status → 'low_quality'\n  (routed to review queue)" as extraction_eval
+  component "Quality Scorer  [no LLM calls]\n──────────────────────────────\nScores each drug record:\n  completeness = filled/13 fields\n  required_pass: generic_name\n    AND coverage_status present\n  enum_valid: coverage_status in\n    {covered, not_covered,\n     covered_with_restrictions}\nAnomaly flags:\n  PA=True but no criteria listed\n  step=True but no steps listed\nGate: completeness≥0.5\n  AND required_pass≥0.8\n  → complete vs low_quality" as extraction_eval
 }
 
-post_validator --> extraction_eval : score results
-extraction_eval --> pipeline : quality gate\npass/fail signal
+structured_write --> extraction_eval : extraction\nresult dict
+extraction_eval --> pipeline : pass/fail → doc status
 
 ' ══════════════════════════════════════════════════════════════
-' [4] RAG QUALITY EVALUATOR  ← MLOps
+' [4] RAG QUALITY  ← MLOps
 ' ══════════════════════════════════════════════════════════════
 package "④ RAG Quality  (rag_evaluator.py)" #E9F7EF {
-  component "RAG Scorer\n────────────────────────────\ncontext_relevance  (token overlap)\ngroundedness_score (citation coverage)\nhuman_rating 1–5 (from analyst)\nreturns rag_score_id\nin AskResponse" as rag_eval
+  component "RAG Scorer  [no LLM calls]\n────────────────────────────\ncontext_relevance:\n  Jaccard token overlap\n  question ∩ chunks / union\ngroundedness:\n  fraction of answer sentences\n  containing a plan name\nhuman_rating: 1–5 from analyst\nreturns rag_score_id\n→ included in AskResponse\nfor analyst rating widget" as rag_eval
 }
 
-rag_engine --> rag_eval : score every\nRAG response
-analyst --> rag_eval : thumbs up/down\nfeedback widget
+tier2 --> rag_eval : score Tier 2\nresponses
+tier3 --> rag_eval : score Tier 3\nresponses
+analyst --> rag_eval : human rating\n1–5 stars
 
 ' ══════════════════════════════════════════════════════════════
-' [5] DATA DRIFT DETECTOR  ← MLOps
+' [5] DATA DRIFT  ← MLOps
 ' ══════════════════════════════════════════════════════════════
 package "⑤ Data Drift Detector  (drift_detector.py)" #FEF9E7 {
-  component "Drift Signals\n──────────────────────────────\nnew_drug_class  (never seen before)\npa_rate_shift   (>20% change vs history)\ncoverage_status_distribution_shift\nextraction_volume_drop\n─────────────────────────\nseverity: info | warning | critical\nStored in drift_events table" as drift_detector
+  component "Drift Signals  [Hook B]\n──────────────────────────────\nnew_drug_class:\n  drug_class never seen → info\npa_rate_shift:\n  |new - prior| > 20% → warning\n  |new - prior| > 40% → critical\ncoverage_distribution_shift:\n  |new_covered - prior| > 25%\nextraction_volume_drop:\n  drop > 30% → extraction\n  regression warning\nCompares vs most recent\nprior 'complete' doc for plan" as drift_detector
 }
 
-pipeline --> drift_detector : called after\nevery ingest
+pipeline --> drift_detector : Hook B after\nevery ingest
 
 ' ══════════════════════════════════════════════════════════════
 ' [6] HUMAN FEEDBACK  ← MLOps
 ' ══════════════════════════════════════════════════════════════
 package "⑥ Human-in-the-Loop  (analyst_corrections)" #FEF9E7 {
-  component "Analyst Correction\n──────────────────────────────\nfield_name | original_value\ncorrected_value | reason\napplied (bool)\n─────────────────────────\nCorrections feed back into\nprompt improvement workflow.\nApply endpoint writes\ncorrected_value to coverage_policies" as hitl
+  component "Analyst Correction\n──────────────────────────────\ncoverage_policy_id | field_name\noriginal_value | corrected_value\ncorrection_reason | applied\n─────────────────────────\nApply endpoint:\n  writes corrected_value to\n  coverage_policies directly\nCorrections visible in\nMLOps Dashboard correction feed" as hitl
 }
 
 analyst --> hitl : correct extraction\nerrors in UI
@@ -178,41 +236,37 @@ analyst --> hitl : correct extraction\nerrors in UI
 ' [7] SEMANTIC QUERY CACHE  ← MLOps
 ' ══════════════════════════════════════════════════════════════
 package "⑦ Semantic Query Cache  (query_cache_service.py)" #E9F7EF {
-  component "Cache Layer\n──────────────────────────────\nKey: SHA256(normalized_question\n      + sorted_plan_ids)\nHit → return cached answer\nMiss → run full RAG pipeline\nTTL: 7 days (configurable)\nInvalidated on new ingest\nfor affected plan" as cache
-
-  note bottom of cache
-    Eliminates redundant
-    Claude calls for repeated
-    questions. Returns
-    cache_hit: bool in response.
-  end note
+  component "Cache Layer  [Hook C]\n──────────────────────────────\nKey: SHA256(q.strip().lower()\n  + '|' + sorted_plan_ids)[:32]\nStore: answer + sources_json\n  + structured_json\nTTL: 7 days (expires_at)\nInvalidation:\n  new ingest for affected plan\n  plan_ids_key CONTAINS plan_id\n  OR plan_ids_key IS NULL\nHit count tracked per entry" as cache
 }
 
-rag_engine --> cache : check before\nClaude call
-pipeline --> cache : invalidate plan's\ncache on new ingest
+cache_check --> cache : read
+tier1 --> cache : store result
+tier2 --> cache : store result
+tier3 --> cache : store result
+pipeline --> cache : Hook C:\ninvalidate on ingest
 
 ' ══════════════════════════════════════════════════════════════
 ' [8] RE-EXTRACTION JOBS  ← MLOps
 ' ══════════════════════════════════════════════════════════════
 package "⑧ Re-extraction Jobs  (reextraction_jobs)" #FDEDEC {
-  component "Job Queue\n──────────────────────────────\ntrigger_reason:\n  prompt_promotion\n  model_change\n  low_quality_score\n  manual\nstatus: queued → running\n       → complete | failed\nAuto-queued on prompt\npromotion to production" as reextract
+  component "Job Queue\n──────────────────────────────\ntrigger_reason:\n  prompt_promotion\n  low_quality_score\n  model_change | manual\nstatus: queued → running\n  → complete | failed\nPUT /mlops/reextraction/run-next\n  picks oldest queued job\n  calls process_document() again\nNew prompt loaded at call time\nfrom registry" as reextract
 }
 
-prompt_promote --> reextract : auto-queue all docs\nwhen prompt promoted
-extraction_eval --> reextract : queue low-quality\ndocs for re-run
+prompt_promote --> reextract : auto-queue all\ncomplete + low_quality\ndocs on promotion
+extraction_eval --> reextract : queue docs that\nfail quality gate
 
 ' ══════════════════════════════════════════════════════════════
 ' [9] EMBEDDING MODEL VERSIONING  ← MLOps
 ' ══════════════════════════════════════════════════════════════
 package "⑨ Embedding Versioning  (embedding_model_versions)" #FEF9E7 {
-  component "Embedding Model Tracker\n──────────────────────────────\nmodel_name | model_version\ndimensions | is_active\n─────────────────────────\nCollection name derived from\nactive model slug:\n  policy_chunks_<model_slug>\nPrevents mixing incompatible\nembedding spaces\nActivating new model →\nauto-queues re-embed jobs" as embed_versioning
+  component "Embedding Model Tracker\n──────────────────────────────\nmodel_name | model_slug\nmodel_version | dimensions\nis_active\n─────────────────────────\nActive: all-MiniLM-L6-v2\nDimensions: 384\nCollection: policy_chunks\nNew active model →\nauto-queues re-embed jobs\nPrevents mixing incompatible\nembedding spaces in ChromaDB" as embed_versioning
 }
 
 ' ══════════════════════════════════════════════════════════════
 ' [10] A/B PROMPT TESTING  ← MLOps
 ' ══════════════════════════════════════════════════════════════
-package "⑩ A/B Prompt Testing  (ab_tester.py)" #FDEDEC {
-  component "A/B Test Runner\n──────────────────────────────\nRun extraction twice on\nsame doc with prompt A & B\nCompute diff:\n  drugs unique to A/B\n  field value differences\nAnalyst sets winner\nWinner promoted to prod\nBoth calls logged via\nllm_call_log" as ab_tester
+package "⑩ A/B Prompt Testing  (ab_test_runs)" #FDEDEC {
+  component "A/B Test Runner\n──────────────────────────────\nRun extraction twice:\n  same doc, prompt A vs B\nStore result_a_json,\n  result_b_json, diff_json\nAnalyst reviews diff in UI:\n  drugs unique to A/B\n  field value differences\nAnalyst sets winner →\n  winner auto-promoted\nBoth calls logged via\nllm_call_log (tracked_call)" as ab_tester
 }
 
 mleng --> ab_tester : create + run\nA/B tests
@@ -220,58 +274,61 @@ ab_tester --> prompt_registry : winner → promote
 ab_tester --> llm_logger : both extraction\ncalls logged
 
 ' ══════════════════════════════════════════════════════════════
-' STORAGE LAYER (extended for MLOps)
+' STORAGE LAYER
 ' ══════════════════════════════════════════════════════════════
-package "Storage Layer  (Extended)" {
-  database "SQLite  (antonrx.db)\n───────────────────────────\n<b>Original tables:</b>\nhealth_plans  |  policy_documents\ndrugs  |  coverage_policies\nprior_auth_criteria  |  step_therapy\npolicy_change_log  |  document_chunks\n\n<b>MLOps tables added:</b>\nprompt_versions\nllm_call_log\nextraction_quality_scores\nrag_quality_scores\ndrift_events\nanalyst_corrections\nquery_cache\nreextraction_jobs\nembedding_model_versions\nab_test_runs\n\n<b>Column additions:</b>\ncoverage_policies.extraction_prompt_version_id\npolicy_documents.extraction_score_id\ndocument_chunks.embedding_model_id" as sqlite
+package "Storage Layer" {
+  database "SQLite  (data/antonrx.db)\n───────────────────────────\n<b>Core tables:</b>\nhealth_plans\npolicy_documents\n  + doc_type, drug_hint\n  + benefit_side_hint    ← NEW\ndrugs\ncoverage_policies\n  + benefit_side          ← NEW\n  + data_completeness     ← NEW\n  + benefit_side_note     ← NEW\n  + extraction_prompt_version_id\nprior_auth_criteria\nstep_therapy_requirements\nstep_therapy_by_indication  ← NEW\n  indication_code | required\n  agents (JSON) | min_duration\n  exceptions (JSON)\n  source_page | source_text\nquantity_limits             ← NEW\n  retail_28_day | home_delivery_84_day\n  weight_based | indication_specific\n  source_page | source_text\npolicy_change_log\ndocument_chunks\n\n<b>MLOps tables:</b>\nprompt_versions\nllm_call_log\nextraction_quality_scores\nrag_quality_scores\ndrift_events\nanalyst_corrections\nquery_cache\nreextraction_jobs\nembedding_model_versions\nab_test_runs" as sqlite
 
-  database "ChromaDB  (versioned)\n─────────────────────────\nCollection name derived\nfrom active embedding\nmodel slug:\npolicy_chunks_<model_slug>\n\nMetadata per chunk:\ndoc_id | plan_id | plan_name\nquarter | page_num\nembedding_model_id" as chromadb
+  database "ChromaDB  (data/chroma_db/)\n─────────────────────────\nCollection: policy_chunks\nEmbedding: all-MiniLM-L6-v2\nDimensions: 384\nDistance: cosine\nMetadata per chunk:\n  document_id | plan_id\n  plan_name | quarter\n  page_number | chunk_index\nChunk ID: doc{id}_chunk{i}\nDelete-before-reinsert\non re-extraction" as chromadb
 }
 
 ' ── Storage connections ────────────────────────────────
-pipeline    --> sqlite       : write drugs, policies,\nchunks, PA criteria
-extractor   --> chromadb     : embed + store chunks
-rag_engine  --> chromadb     : similarity search
-rag_engine  --> sqlite       : SQL pre-filter + join
-llm_logger  --> sqlite       : append llm_call_log rows
-extraction_eval --> sqlite   : write quality scores
-rag_eval    --> sqlite       : write RAG scores
-drift_detector --> sqlite    : write drift_events
-hitl        --> sqlite       : analyst corrections
-cache       --> sqlite       : read/write query_cache
-reextract   --> sqlite       : job queue management
-embed_versioning --> chromadb : collection per model
-embed_versioning --> sqlite  : model version registry
-ab_tester   --> sqlite       : ab_test_runs
+structured_write --> sqlite    : coverage_policies\nstep_therapy_by_indication\nquantity_limits\nprior_auth_criteria\npolicy_change_log
+embedder         --> chromadb  : add_chunks()\n(collection.add)
+tier3            --> chromadb  : similarity_search()\nwhere plan_id filter
+cache_check      --> sqlite    : query_cache lookup
+tier1            --> sqlite    : read coverage_policies
+tier2            --> sqlite    : read coverage_policies
+sql_filter       --> sqlite    : get_coverage_for_drug()\nJOIN 4 tables
+llm_logger       --> sqlite    : INSERT llm_call_log\n(isolated session)
+extraction_eval  --> sqlite    : INSERT extraction_quality_scores
+rag_eval         --> sqlite    : INSERT rag_quality_scores
+drift_detector   --> sqlite    : INSERT drift_events
+hitl             --> sqlite    : analyst_corrections
+cache            --> sqlite    : read/write query_cache
+reextract        --> sqlite    : reextraction_jobs queue
+embed_versioning --> chromadb  : collection per model slug
+embed_versioning --> sqlite    : embedding_model_versions
+ab_tester        --> sqlite    : ab_test_runs
 
 ' ══════════════════════════════════════════════════════════════
-' MLOPS FEEDBACK LOOPS (highlighted flows)
+' FEEDBACK LOOPS
 ' ══════════════════════════════════════════════════════════════
-
 note top of prompt_promote
   <b>Feedback Loop A — Prompt Improvement</b>
-  1. Analyst submits corrections  ⑥
-  2. ML Engineer sees patterns in corrections
-  3. Edits prompt → draft in Prompt Registry  ①
-  4. A/B Tests new vs old prompt on sample docs  ⑩
+  1. Analyst submits field corrections  ⑥
+  2. ML Engineer identifies patterns
+  3. Edits prompt → new draft in Registry  ①
+  4. A/B Tests new vs current prompt  ⑩
   5. Sets winner, promotes to production
-  6. Re-extraction jobs auto-queued for all docs  ⑧
+  6. Re-extraction auto-queued for all docs  ⑧
+  7. New v2.x prompt loaded at call time
 end note
 
 note bottom of rag_eval
   <b>Feedback Loop B — RAG Quality</b>
-  Analyst thumbs up/down → human_rating stored
-  Aggregated score monitored on MLOps Dashboard
-  Low scores trigger prompt review in Loop A
+  Tier 1: grounded from DB, always accurate
+  Tier 2/3: analyst rates 1–5 stars
+  Low groundedness → review prompt (Loop A)
+  routing_tier + source_cost in every response
 end note
 
 note right of drift_detector
   <b>Feedback Loop C — Data Drift</b>
-  New drug class detected →
-  DriftEvent (severity=warning)
-  ML Engineer reviews extraction
-  quality for the new class,
-  updates prompt if needed (Loop A)
+  pa_rate_shift >20% → warning
+  New drug class → info event
+  Volume drop >30% → extraction regression
+  ML Engineer reviews → updates prompt (Loop A)
 end note
 
 ' ══════════════════════════════════════════════════════════════
@@ -279,11 +336,13 @@ end note
 ' ══════════════════════════════════════════════════════════════
 legend right
   |= Color |= Layer |
-  | <#E8F4FD> | Application (API + AI) |
-  | <#E9F7EF> | Observability / Quality |
-  | <#FEF9E7> | Versioning / Registry |
+  | <#EBF5FB> | Frontend + API |
+  | <#E9F7EF> | Quality & Observability |
+  | <#FEF9E7> | Versioning & Registry |
   | <#FDEDEC> | Pipeline Control |
+  | <#E8F4FD> | AI Layer |
   Numbers ①–⑩ = MLOps components
+  ← NEW = added in v2.0
 endlegend
 
 @enduml

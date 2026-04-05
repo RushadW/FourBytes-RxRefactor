@@ -136,7 +136,7 @@ def generate_answer(
     vector_context: str,
     prompt_version_id: Optional[int] = None,
 ) -> tuple:
-    """Returns (answer_text, llm_call_log_id)."""
+    """Returns (answer_text, llm_call_log_id, prompt_version_id)."""
     rag_system, _, vid = _get_rag_prompts()
     effective_version_id = prompt_version_id or vid
 

@@ -196,9 +196,9 @@ def extract_from_batches(
 
     # Deduplicate by generic_name
     seen: Dict[str, Dict] = {}
-    for drug in all_drugs:
-        key = (drug.get("generic_name") or "").lower().strip()
+    for d in all_drugs:
+        key = (d.get("generic_name") or "").lower().strip()
         if key:
-            seen[key] = drug
+            seen[key] = d
 
     return {**plan_meta, "drugs": list(seen.values()), "_prompt_version_id": version_id}

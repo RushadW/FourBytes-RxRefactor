@@ -62,7 +62,7 @@ def update_document_status(db: Session, document_id: int, status: str,
         doc.status = status
         if error_message:
             doc.error_message = error_message
-        if status == "complete":
+        if status in ("complete", "low_quality"):
             doc.processed_at = datetime.utcnow()
         db.commit()
 

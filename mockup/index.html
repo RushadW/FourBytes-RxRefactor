@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AntonRx — Drug Policy Tracker</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --blue-900: #1e3a5f;
+    --blue-700: #1d4ed8;
+    --blue-600: #2563eb;
+    --blue-100: #dbeafe;
+    --blue-50:  #eff6ff;
+    --slate-900: #0f172a;
+    --slate-700: #334155;
+    --slate-500: #64748b;
+    --slate-300: #cbd5e1;
+    --slate-200: #e2e8f0;
+    --slate-100: #f1f5f9;
+    --slate-50:  #f8fafc;
+    --green-700: #15803d;
+    --green-100: #dcfce7;
+    --amber-700: #b45309;
+    --amber-100: #fef3c7;
+    --red-700:   #b91c1c;
+    --red-100:   #fee2e2;
+    --purple-700:#7c3aed;
+    --purple-100:#ede9fe;
+    --white: #ffffff;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+    --shadow-md: 0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.06);
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    color: var(--slate-900);
+    background: var(--slate-100);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── SIDEBAR ─────────────────────────────── */
+  .sidebar {
+    width: 220px;
+    min-width: 220px;
+    background: var(--blue-900);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow-y: auto;
+  }
+  .sidebar-logo {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+  }
+  .sidebar-logo .logo-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -.3px;
+  }
+  .sidebar-logo .logo-sub {
+    font-size: 11px;
+    color: rgba(255,255,255,.5);
+    margin-top: 2px;
+  }
+  .nav-section {
+    padding: 16px 12px 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: rgba(255,255,255,.35);
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 16px;
+    margin: 1px 8px;
+    border-radius: 6px;
+    color: rgba(255,255,255,.7);
+    cursor: pointer;
+    font-size: 13.5px;
+    transition: background .15s, color .15s;
+    border: none;
+    background: none;
+    width: calc(100% - 16px);
+    text-align: left;
+  }
+  .nav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
+  .nav-item.active { background: rgba(255,255,255,.15); color: #fff; font-weight: 600; }
+  .nav-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 16px;
+    border-top: 1px solid rgba(255,255,255,.1);
+    font-size: 11px;
+    color: rgba(255,255,255,.4);
+  }
+  .status-dot { width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;margin-right:5px; }
+
+  /* ── MAIN ────────────────────────────────── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .topbar {
+    background: var(--white);
+    border-bottom: 1px solid var(--slate-200);
+    padding: 0 24px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .topbar-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--slate-900);
+  }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 600;
+    gap: 4px;
+  }
+  .badge-green  { background: var(--green-100); color: var(--green-700); }
+  .badge-amber  { background: var(--amber-100); color: var(--amber-700); }
+  .badge-red    { background: var(--red-100);   color: var(--red-700); }
+  .badge-blue   { background: var(--blue-100);  color: var(--blue-700); }
+  .badge-purple { background: var(--purple-100);color: var(--purple-700); }
+  .badge-slate  { background: var(--slate-200); color: var(--slate-700); }
+
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+  }
+
+  /* ── SCREENS ─────────────────────────────── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ── CARDS ───────────────────────────────── */
+  .card {
+    background: var(--white);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .card-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--slate-200);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--slate-900); }
+  .card-body { padding: 18px; }
+
+  /* ── GRID ────────────────────────────────── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; }
+
+  /* ── METRIC CARDS ────────────────────────── */
+  .metric {
+    background: var(--white);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .metric-label { font-size: 11.5px; color: var(--slate-500); font-weight: 500; text-transform: uppercase; letter-spacing:.04em; }
+  .metric-value { font-size: 28px; font-weight: 700; color: var(--slate-900); margin: 4px 0 2px; line-height:1; }
+  .metric-sub { font-size: 12px; color: var(--slate-500); }
+  .metric-trend-up   { color: var(--green-700); font-size:12px; font-weight:600; }
+  .metric-trend-down { color: var(--red-700);   font-size:12px; font-weight:600; }
+
+  /* ── BUTTONS ─────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity .15s, background .15s;
+  }
+  .btn:hover { opacity: .88; }
+  .btn-primary { background: var(--blue-600); color: #fff; }
+  .btn-secondary { background: var(--slate-200); color: var(--slate-700); }
+  .btn-ghost { background: transparent; color: var(--blue-600); border: 1px solid var(--blue-600); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-danger { background:#fee2e2; color:var(--red-700); }
+
+  /* ── INPUTS ──────────────────────────────── */
+  .input-group { display: flex; flex-direction: column; gap: 5px; }
+  .input-label { font-size: 12px; font-weight: 600; color: var(--slate-700); }
+  .input, .select, .textarea {
+    border: 1.5px solid var(--slate-300);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13.5px;
+    color: var(--slate-900);
+    background: var(--white);
+    outline: none;
+    font-family: inherit;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .input:focus, .select:focus, .textarea:focus {
+    border-color: var(--blue-600);
+    box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+  }
+  .textarea { resize: vertical; min-height: 80px; }
+  .select { cursor: pointer; }
+  .input-row { display: flex; gap: 12px; }
+  .input-row .input-group { flex: 1; }
+
+  /* ── TABLE ───────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--slate-500);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--slate-200);
+    background: var(--slate-50);
+  }
+  tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--slate-100);
+    font-size: 13px;
+    color: var(--slate-700);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--slate-50); }
+  .cell-main { color: var(--slate-900); font-weight: 500; }
+
+  /* ── ASK AI SPECIFIC ─────────────────────── */
+  .chat-area {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .message {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .message.user { flex-direction: row-reverse; }
+  .avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; flex-shrink: 0;
+  }
+  .avatar-ai  { background: var(--blue-700); color: #fff; }
+  .avatar-user{ background: var(--slate-200); color: var(--slate-700); }
+  .bubble {
+    max-width: 75%;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  .bubble-ai   { background: var(--white); border: 1px solid var(--slate-200); color: var(--slate-800); }
+  .bubble-user { background: var(--blue-600); color: #fff; }
+  .bubble strong { font-weight: 700; }
+  .bubble ul { padding-left: 16px; margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+  .tier-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 600; padding: 3px 8px;
+    border-radius: 20px; margin-top: 8px;
+    background: var(--green-100); color: var(--green-700);
+  }
+  .chat-input-area {
+    background: var(--white);
+    border: 1.5px solid var(--slate-300);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .chat-input-area textarea {
+    border: none; outline: none; resize: none;
+    font-size: 14px; color: var(--slate-900);
+    font-family: inherit; min-height: 44px;
+    background: transparent;
+  }
+  .chat-input-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .chat-filters { display: flex; align-items: center; gap: 8px; }
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    background: var(--blue-50); color: var(--blue-700);
+    border: 1px solid var(--blue-100); cursor: pointer;
+  }
+  .filter-chip .x { font-size: 10px; opacity:.6; }
+  .sources-panel {
+    background: var(--slate-50);
+    border: 1px solid var(--slate-200);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 12px;
+    color: var(--slate-600);
+  }
+  .sources-panel strong { color: var(--slate-800); display: block; margin-bottom: 8px; font-size: 12px; }
+  .source-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 5px;
+    background: var(--white); border: 1px solid var(--slate-200);
+    margin-bottom: 5px; font-size: 12px; color: var(--slate-600);
+  }
+  .source-icon { font-size: 14px; flex-shrink: 0; }
+
+  /* ── COMPARE SPECIFIC ────────────────────── */
+  .compare-header-row {
+    display: grid; grid-template-columns: 180px repeat(3, 1fr);
+    gap: 0; border-bottom: 2px solid var(--slate-200);
+  }
+  .compare-header-cell {
+    padding: 14px 16px; font-size: 13px; font-weight: 700;
+    color: var(--slate-900); border-right: 1px solid var(--slate-200);
+  }
+  .compare-header-cell:first-child { color: var(--slate-500); font-weight: 600; font-size: 12px; }
+  .compare-row {
+    display: grid; grid-template-columns: 180px repeat(3, 1fr);
+    gap: 0; border-bottom: 1px solid var(--slate-100);
+  }
+  .compare-row:hover { background: var(--slate-50); }
+  .compare-cell {
+    padding: 11px 16px; font-size: 13px; color: var(--slate-700);
+    border-right: 1px solid var(--slate-100); display: flex;
+    align-items: center; gap: 6px;
+  }
+  .compare-cell:first-child { font-weight: 600; color: var(--slate-500); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .compare-section-header {
+    grid-column: 1 / -1;
+    padding: 8px 16px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--blue-700);
+    background: var(--blue-50); border-bottom: 1px solid var(--blue-100);
+  }
+
+  /* ── UPLOAD ──────────────────────────────── */
+  .dropzone {
+    border: 2px dashed var(--slate-300);
+    border-radius: var(--radius);
+    padding: 36px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    background: var(--slate-50);
+  }
+  .dropzone:hover { border-color: var(--blue-600); background: var(--blue-50); }
+  .dropzone-icon { font-size: 36px; margin-bottom: 10px; }
+  .dropzone-title { font-size: 15px; font-weight: 600; color: var(--slate-700); }
+  .dropzone-sub { font-size: 12.5px; color: var(--slate-400); margin-top: 4px; }
+
+  .doc-list-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--slate-100);
+  }
+  .doc-list-item:last-child { border-bottom: none; }
+  .doc-icon { font-size: 22px; flex-shrink: 0; }
+  .doc-info { flex: 1; }
+  .doc-name { font-size: 13px; font-weight: 600; color: var(--slate-900); }
+  .doc-meta { font-size: 11.5px; color: var(--slate-400); margin-top: 2px; }
+  .doc-status { display: flex; align-items: center; gap: 8px; }
+  .progress-bar {
+    height: 4px; border-radius: 2px;
+    background: var(--slate-200); overflow: hidden;
+    width: 80px;
+  }
+  .progress-fill { height: 100%; background: var(--blue-600); border-radius: 2px; }
+
+  /* ── COVERAGE GRID ───────────────────────── */
+  .coverage-cell {
+    width: 36px; height: 28px;
+    border-radius: 4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; cursor: pointer;
+    transition: transform .1s;
+  }
+  .coverage-cell:hover { transform: scale(1.15); }
+  .cov-covered     { background: var(--green-100); color: var(--green-700); }
+  .cov-restricted  { background: var(--amber-100); color: var(--amber-700); }
+  .cov-not-covered { background: var(--red-100);   color: var(--red-700); }
+  .cov-unknown     { background: var(--slate-200); color: var(--slate-500); }
+
+  /* ── MLOPS SPECIFIC ──────────────────────── */
+  .cost-bar { height: 6px; background: var(--slate-200); border-radius: 3px; margin-top: 8px; }
+  .cost-fill { height: 100%; border-radius: 3px; }
+  .alert-item {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 16px; border-bottom: 1px solid var(--slate-100);
+  }
+  .alert-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .alert-title { font-size: 13px; font-weight: 600; color: var(--slate-900); }
+  .alert-sub { font-size: 12px; color: var(--slate-400); margin-top: 2px; }
+  .alert-actions { margin-left: auto; flex-shrink: 0; }
+
+  /* ── CHANGE LOG ──────────────────────────── */
+  .change-old { text-decoration: line-through; color: var(--red-700); font-size: 12px; }
+  .change-new { color: var(--green-700); font-size: 12px; font-weight: 600; }
+  .change-arrow { color: var(--slate-400); font-size: 11px; }
+
+  /* ── UTIL ────────────────────────────────── */
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .gap-2 { gap: 8px; }
+  .gap-3 { gap: 12px; }
+  .gap-4 { gap: 16px; }
+  .mb-4 { margin-bottom: 16px; }
+  .mb-5 { margin-bottom: 20px; }
+  .mb-6 { margin-bottom: 24px; }
+  .mt-3 { margin-top: 12px; }
+  .mt-4 { margin-top: 16px; }
+  .text-sm { font-size: 12px; }
+  .text-slate { color: var(--slate-500); }
+  .font-600 { font-weight: 600; }
+  .w-full { width: 100%; }
+  .divider { height: 1px; background: var(--slate-200); margin: 16px 0; }
+  .check { color: var(--green-700); }
+  .cross { color: var(--red-700); }
+  .warn  { color: var(--amber-700); }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--slate-300); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════ SIDEBAR ══════════════════════ -->
+<nav class="sidebar" role="navigation" aria-label="Main navigation">
+  <div class="sidebar-logo">
+    <div class="logo-title">💊 AntonRx</div>
+    <div class="logo-sub">Drug Policy Tracker v2</div>
+  </div>
+
+  <div class="nav-section">Analyst</div>
+  <button class="nav-item" onclick="show('ask')"     aria-label="Ask AI">
+    <span class="nav-icon" aria-hidden="true">🤖</span> Ask AI
+  </button>
+  <button class="nav-item" onclick="show('compare')" aria-label="Compare">
+    <span class="nav-icon" aria-hidden="true">⚖️</span> Compare
+  </button>
+  <button class="nav-item" onclick="show('coverage')" aria-label="Coverage Grid">
+    <span class="nav-icon" aria-hidden="true">🗂️</span> Coverage Grid
+  </button>
+  <button class="nav-item" onclick="show('changes')" aria-label="Change Tracker">
+    <span class="nav-icon" aria-hidden="true">📋</span> Change Tracker
+  </button>
+
+  <div class="nav-section">Documents</div>
+  <button class="nav-item" onclick="show('upload')" aria-label="Upload Documents">
+    <span class="nav-icon" aria-hidden="true">📤</span> Upload
+  </button>
+
+  <div class="nav-section">ML Engineer</div>
+  <button class="nav-item" onclick="show('mlops')" aria-label="MLOps Dashboard">
+    <span class="nav-icon" aria-hidden="true">📊</span> MLOps
+  </button>
+
+  <div class="sidebar-footer">
+    <div><span class="status-dot" aria-hidden="true"></span>API connected</div>
+    <div style="margin-top:4px">Q2 2026 · 3 plans loaded</div>
+  </div>
+</nav>
+
+<!-- ══════════════════════ MAIN ══════════════════════ -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div id="topbar-title" class="topbar-title">Ask AI</div>
+    <div class="topbar-right">
+      <span class="badge badge-blue">3 Plans</span>
+      <span class="badge badge-green">● Live</span>
+      <button class="btn btn-secondary btn-sm" style="font-size:12px">⚙ Settings</button>
+    </div>
+  </div>
+
+  <div class="content" id="content-area" role="main">
+
+    <!-- ══ SCREEN: ASK AI ══ -->
+    <div class="screen active" id="screen-ask">
+      <div class="grid-2" style="gap:20px; height:calc(100vh - 130px);">
+
+        <!-- Left: Chat -->
+        <div style="display:flex;flex-direction:column;gap:16px;overflow:hidden;">
+          <div class="card" style="flex:1;overflow-y:auto;">
+            <div class="card-header">
+              <span class="card-title">Query Assistant</span>
+              <span class="badge badge-slate">Tier 1 — Structured DB · $0.00</span>
+            </div>
+            <div class="card-body">
+              <div class="chat-area">
+                <!-- AI welcome -->
+                <div class="message" role="article" aria-label="AI message">
+                  <div class="avatar avatar-ai" aria-hidden="true">Rx</div>
+                  <div class="bubble bubble-ai">
+                    Hi! I can answer questions about drug coverage, prior authorization, and step therapy across all loaded plans. Try asking about a specific drug or payer.
+                  </div>
+                </div>
+
+                <!-- User question -->
+                <div class="message user" role="article" aria-label="Your message">
+                  <div class="avatar avatar-user" aria-hidden="true">JD</div>
+                  <div class="bubble bubble-user">
+                    Does Florida Blue require step therapy for adalimumab for RA patients?
+                  </div>
+                </div>
+
+                <!-- AI answer -->
+                <div class="message" role="article" aria-label="AI answer">
+                  <div class="avatar avatar-ai" aria-hidden="true">Rx</div>
+                  <div>
+                    <div class="bubble bubble-ai">
+                      <strong>Florida Blue — Adalimumab (Humira) · Rheumatoid Arthritis</strong><br><br>
+                      <strong>Step therapy: Required ✓</strong><br>
+                      Patients must try and fail at least <strong>one conventional DMARD</strong> before adalimumab is approved:
+                      <ul>
+                        <li>Methotrexate (minimum 3 months, adequate dose)</li>
+                        <li>Hydroxychloroquine</li>
+                        <li>Leflunomide</li>
+                        <li>Sulfasalazine</li>
+                      </ul>
+                      <br>
+                      <strong>Benefit side:</strong> Medical (administered benefit)<br>
+                      <strong>Prior auth:</strong> Required · 12-month approval period<br>
+                      <strong>Source:</strong> Clinical Policy CP-2026-041, Page 22<br>
+                      <br>
+                      <em>Exceptions apply for documented contraindication or prior biologic treatment.</em>
+                    </div>
+                    <div class="tier-pill" role="status" aria-label="Answer routing info">
+                      🗃 Tier 1 — Structured DB · No LLM call · $0.00
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Input -->
+              <div class="chat-input-area">
+                <textarea placeholder="Ask about coverage, prior auth, step therapy, formulary tier…" aria-label="Enter your question"></textarea>
+                <div class="chat-input-row">
+                  <div class="chat-filters" aria-label="Active filters">
+                    <span style="font-size:11.5px;color:var(--slate-400);font-weight:500;">Filter:</span>
+                    <span class="filter-chip" role="button" aria-label="Remove Florida Blue filter">🏥 Florida Blue <span class="x" aria-hidden="true">×</span></span>
+                    <span class="filter-chip" role="button" aria-label="Remove Cigna filter">🏥 Cigna <span class="x" aria-hidden="true">×</span></span>
+                    <span class="filter-chip" style="background:var(--slate-100);color:var(--slate-500);border-color:var(--slate-200);" role="button" aria-label="Add plan filter">+ Plan</span>
+                  </div>
+                  <button class="btn btn-primary" aria-label="Send question">Send ↑</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Structured hits + Sources -->
+        <div style="display:flex;flex-direction:column;gap:16px;overflow:hidden;">
+          <!-- Structured hits -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Policy Matches</span>
+              <span class="badge badge-slate">3 records</span>
+            </div>
+            <div style="overflow-x:auto;">
+              <table role="grid" aria-label="Matching coverage policies">
+                <thead>
+                  <tr>
+                    <th>Plan</th>
+                    <th>Status</th>
+                    <th>Benefit</th>
+                    <th>PA</th>
+                    <th>Step Tx</th>
+                    <th>Data</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="cell-main">Florida Blue</td>
+                    <td><span class="badge badge-amber">Restricted</span></td>
+                    <td><span class="badge badge-purple">Medical</span></td>
+                    <td><span class="check" aria-label="Required">✓ Req</span></td>
+                    <td><span class="check" aria-label="Required">✓ Req</span></td>
+                    <td><span class="badge badge-green">🟢 High</span></td>
+                  </tr>
+                  <tr>
+                    <td class="cell-main">Cigna</td>
+                    <td><span class="badge badge-amber">Restricted</span></td>
+                    <td><span class="badge badge-blue">Pharmacy</span></td>
+                    <td><span class="check" aria-label="Required">✓ Req</span></td>
+                    <td><span class="cross" aria-label="Not required">✗ No</span></td>
+                    <td><span class="badge badge-amber">🟡 Med</span></td>
+                  </tr>
+                  <tr>
+                    <td class="cell-main">MyPriority</td>
+                    <td><span class="badge badge-green">Covered</span></td>
+                    <td><span class="badge badge-blue">Pharmacy</span></td>
+                    <td><span class="cross" aria-label="Not required">✗ No</span></td>
+                    <td><span class="cross" aria-label="Not required">✗ No</span></td>
+                    <td><span class="badge badge-slate">🔴 Low</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Sources -->
+          <div class="card" style="flex:1;overflow-y:auto;">
+            <div class="card-header">
+              <span class="card-title">Source Evidence</span>
+              <span class="badge badge-blue">Page citations</span>
+            </div>
+            <div class="card-body" style="padding:12px;">
+              <div class="sources-panel">
+                <strong>📄 Documents referenced</strong>
+                <div class="source-item">
+                  <span class="source-icon">📋</span>
+                  <div>
+                    <div style="font-weight:600;color:var(--slate-800);">florida_blue_adalimumab.pdf</div>
+                    <div style="color:var(--slate-400);font-size:11px;">CP-2026-041 · Page 22 · Clinical Policy · Medical</div>
+                    <div style="margin-top:4px;font-style:italic;color:var(--slate-600);">"The member has tried and had an inadequate response to maximally tolerated methotrexate…"</div>
+                  </div>
+                </div>
+                <div class="source-item">
+                  <span class="source-icon">📋</span>
+                  <div>
+                    <div style="font-weight:600;color:var(--slate-800);">cigna_dqm005_adalimumab.pdf</div>
+                    <div style="color:var(--slate-400);font-size:11px;">DQM-005 · Page 8 · DQM Policy · Pharmacy</div>
+                    <div style="margin-top:4px;font-style:italic;color:var(--slate-600);">"Prior authorization is required for all adalimumab products…"</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-4">
+                <div style="font-size:12px;color:var(--slate-400);margin-bottom:8px;font-weight:600;">QUICK ACTIONS</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <button class="btn btn-ghost btn-sm">📊 Compare all plans</button>
+                  <button class="btn btn-ghost btn-sm">📥 Export answer</button>
+                  <button class="btn btn-secondary btn-sm">⭐ Rate this answer</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ══ SCREEN: COMPARE ══ -->
+    <div class="screen" id="screen-compare">
+      <!-- Controls row -->
+      <div class="flex items-center justify-between mb-5">
+        <div class="flex gap-3 items-center">
+          <div class="input-group" style="min-width:200px;">
+            <label class="input-label" for="drug-search">Drug</label>
+            <input id="drug-search" class="input" type="text" value="adalimumab" aria-label="Search for drug" />
+          </div>
+          <div class="input-group" style="min-width:160px;">
+            <label class="input-label" for="comp-mode">Mode</label>
+            <select id="comp-mode" class="select" aria-label="Comparison mode">
+              <option selected>Drug across plans</option>
+              <option>Two-plan diff</option>
+            </select>
+          </div>
+          <div class="input-group" style="min-width:140px;">
+            <label class="input-label" for="benefit-filter">Benefit side</label>
+            <select id="benefit-filter" class="select" aria-label="Filter by benefit side">
+              <option selected>All</option>
+              <option>Medical only</option>
+              <option>Pharmacy only</option>
+            </select>
+          </div>
+          <div style="margin-top:20px;">
+            <button class="btn btn-primary">Compare</button>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-secondary btn-sm">📥 Export CSV</button>
+          <button class="btn btn-secondary btn-sm">🖨 Print</button>
+        </div>
+      </div>
+
+      <!-- Drug header -->
+      <div class="card mb-4">
+        <div class="card-body" style="padding:14px 18px;">
+          <div class="flex items-center justify-between">
+            <div>
+              <span style="font-size:18px;font-weight:700;color:var(--slate-900)">Adalimumab</span>
+              <span style="font-size:14px;color:var(--slate-400);margin-left:8px;">Humira · TNF Inhibitor / Biologic DMARD</span>
+            </div>
+            <div class="flex gap-2">
+              <span class="badge badge-amber">2 Restricted</span>
+              <span class="badge badge-green">1 Covered</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compare table -->
+      <div class="card">
+        <div class="compare-header-row" role="row">
+          <div class="compare-header-cell" role="columnheader">Field</div>
+          <div class="compare-header-cell" role="columnheader">
+            Florida Blue
+            <div style="font-size:11px;color:var(--slate-400);font-weight:400;margin-top:2px;">Commercial · Q2 2026</div>
+          </div>
+          <div class="compare-header-cell" role="columnheader">
+            Cigna
+            <div style="font-size:11px;color:var(--slate-400);font-weight:400;margin-top:2px;">Commercial · Q4 2025</div>
+          </div>
+          <div class="compare-header-cell" style="border-right:none;" role="columnheader">
+            MyPriority
+            <div style="font-size:11px;color:var(--slate-400);font-weight:400;margin-top:2px;">Individual · Q1 2026</div>
+          </div>
+        </div>
+
+        <div class="compare-section-header" role="rowgroup">Coverage</div>
+
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">Benefit Side</div>
+          <div class="compare-cell" role="cell"><span class="badge badge-purple">Medical</span></div>
+          <div class="compare-cell" role="cell"><span class="badge badge-blue">Pharmacy</span></div>
+          <div class="compare-cell" style="border-right:none;" role="cell"><span class="badge badge-blue">Pharmacy</span></div>
+        </div>
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">Coverage Status</div>
+          <div class="compare-cell" role="cell"><span class="badge badge-amber">Restricted</span></div>
+          <div class="compare-cell" role="cell"><span class="badge badge-amber">Restricted</span></div>
+          <div class="compare-cell" style="border-right:none;" role="cell"><span class="badge badge-green">Covered</span></div>
+        </div>
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">Formulary Tier</div>
+          <div class="compare-cell" role="cell">—</div>
+          <div class="compare-cell" role="cell">Tier 4 (Non-preferred Specialty)</div>
+          <div class="compare-cell" style="border-right:none;" role="cell">Tier 3 (Preferred Specialty)</div>
+        </div>
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">Data Completeness</div>
+          <div class="compare-cell" role="cell"><span class="badge badge-green">🟢 High</span></div>
+          <div class="compare-cell" role="cell"><span class="badge badge-amber">🟡 Medium</span></div>
+          <div class="compare-cell" style="border-right:none;" role="cell"><span class="badge badge-red" style="background:var(--red-100);color:var(--red-700);">🔴 Low</span></div>
+        </div>
+
+        <div class="compare-section-header" role="rowgroup">Prior Authorization</div>
+
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">PA Required</div>
+          <div class="compare-cell" role="cell"><span class="check font-600">✓ Yes</span></div>
+          <div class="compare-cell" role="cell"><span class="check font-600">✓ Yes</span></div>
+          <div class="compare-cell" style="border-right:none;" role="cell"><span class="cross">✗ No</span></div>
+        </div>
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">Approval Duration</div>
+          <div class="compare-cell" role="cell">12 months</div>
+          <div class="compare-cell" role="cell">12 months</div>
+          <div class="compare-cell" style="border-right:none;" role="cell">—</div>
+        </div>
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">Key PA Criteria</div>
+          <div class="compare-cell" style="flex-direction:column;align-items:flex-start;gap:3px;" role="cell">
+            <div style="font-size:12px;">• Active RA/AS/CD/UC/PS/PsA/HS/Uveitis Dx</div>
+            <div style="font-size:12px;">• Step therapy failure documented</div>
+            <div style="font-size:12px;">• Prescriber is specialist</div>
+          </div>
+          <div class="compare-cell" style="flex-direction:column;align-items:flex-start;gap:3px;" role="cell">
+            <div style="font-size:12px;">• Confirmed diagnosis</div>
+            <div style="font-size:12px;">• Trial of preferred biosimilar</div>
+          </div>
+          <div class="compare-cell" style="border-right:none;color:var(--slate-400);font-style:italic;" role="cell">Not required</div>
+        </div>
+
+        <div class="compare-section-header" role="rowgroup">Step Therapy (RA Indication)</div>
+
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">Step Therapy Required</div>
+          <div class="compare-cell" role="cell"><span class="check font-600">✓ Yes</span></div>
+          <div class="compare-cell" role="cell"><span class="cross">✗ No</span></div>
+          <div class="compare-cell" style="border-right:none;" role="cell"><span class="cross">✗ No</span></div>
+        </div>
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">Required Prior Agents</div>
+          <div class="compare-cell" style="flex-direction:column;align-items:flex-start;gap:3px;" role="cell">
+            <div style="font-size:12px;">• Methotrexate (≥3 months)</div>
+            <div style="font-size:12px;">• Hydroxychloroquine</div>
+            <div style="font-size:12px;">• Leflunomide</div>
+            <div style="font-size:12px;">• Sulfasalazine</div>
+          </div>
+          <div class="compare-cell" style="color:var(--slate-400);font-style:italic;" role="cell">Not applicable</div>
+          <div class="compare-cell" style="border-right:none;color:var(--slate-400);font-style:italic;" role="cell">Not applicable</div>
+        </div>
+
+        <div class="compare-section-header" role="rowgroup">Quantity Limits</div>
+
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">Retail (28-day)</div>
+          <div class="compare-cell" role="cell">2 pens / 28 days</div>
+          <div class="compare-cell" role="cell">2 pens / 28 days</div>
+          <div class="compare-cell" style="border-right:none;" role="cell">—</div>
+        </div>
+        <div class="compare-row" role="row">
+          <div class="compare-cell" role="cell">Home Delivery (84-day)</div>
+          <div class="compare-cell" role="cell">—</div>
+          <div class="compare-cell" role="cell">6 pens / 84 days</div>
+          <div class="compare-cell" style="border-right:none;" role="cell">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SCREEN: COVERAGE GRID ══ -->
+    <div class="screen" id="screen-coverage">
+      <div class="flex items-center justify-between mb-5">
+        <div class="flex gap-3">
+          <input class="input" type="text" placeholder="Filter drugs…" style="width:200px;" aria-label="Filter drugs" />
+          <select class="select" style="width:160px;" aria-label="Filter by benefit side">
+            <option>All benefit sides</option>
+            <option>Medical</option>
+            <option>Pharmacy</option>
+          </select>
+          <select class="select" style="width:140px;" aria-label="Filter by coverage status">
+            <option>All statuses</option>
+            <option>Covered</option>
+            <option>Restricted</option>
+            <option>Not covered</option>
+          </select>
+        </div>
+        <div class="flex gap-2 items-center">
+          <div class="flex gap-2 text-sm text-slate" aria-label="Legend">
+            <span><span class="coverage-cell cov-covered" style="width:16px;height:16px;border-radius:3px;font-size:0;" aria-hidden="true"> </span> Covered</span>
+            <span><span class="coverage-cell cov-restricted" style="width:16px;height:16px;border-radius:3px;font-size:0;" aria-hidden="true"> </span> Restricted</span>
+            <span><span class="coverage-cell cov-not-covered" style="width:16px;height:16px;border-radius:3px;font-size:0;" aria-hidden="true"> </span> Not covered</span>
+            <span><span class="coverage-cell cov-unknown" style="width:16px;height:16px;border-radius:3px;font-size:0;" aria-hidden="true"> </span> Unknown</span>
+          </div>
+          <button class="btn btn-secondary btn-sm">📥 Export</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="overflow-x:auto;">
+          <table role="grid" aria-label="Coverage grid">
+            <thead>
+              <tr>
+                <th style="width:180px;position:sticky;left:0;background:var(--slate-50);">Drug (Generic)</th>
+                <th style="text-align:center;">Florida Blue<br><span style="font-weight:400;text-transform:none;font-size:11px;color:var(--slate-400)">Medical</span></th>
+                <th style="text-align:center;">Cigna<br><span style="font-weight:400;text-transform:none;font-size:11px;color:var(--slate-400)">Pharmacy</span></th>
+                <th style="text-align:center;">MyPriority<br><span style="font-weight:400;text-transform:none;font-size:11px;color:var(--slate-400)">Pharmacy</span></th>
+                <th>Drug Class</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="cell-main" style="position:sticky;left:0;background:var(--white);">Adalimumab</td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="Florida Blue: Restricted">R</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="Cigna: Restricted">R</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-covered" role="button" tabindex="0" aria-label="MyPriority: Covered">C</span></td>
+                <td class="text-slate">TNF Inhibitor</td>
+              </tr>
+              <tr>
+                <td class="cell-main" style="position:sticky;left:0;background:var(--white);">Etanercept</td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="Florida Blue: Restricted">R</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-covered" role="button" tabindex="0" aria-label="Cigna: Covered">C</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-covered" role="button" tabindex="0" aria-label="MyPriority: Covered">C</span></td>
+                <td class="text-slate">TNF Inhibitor</td>
+              </tr>
+              <tr>
+                <td class="cell-main" style="position:sticky;left:0;background:var(--white);">Secukinumab</td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="Florida Blue: Restricted">R</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="Cigna: Restricted">R</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-not-covered" role="button" tabindex="0" aria-label="MyPriority: Not covered">N</span></td>
+                <td class="text-slate">IL-17A Inhibitor</td>
+              </tr>
+              <tr>
+                <td class="cell-main" style="position:sticky;left:0;background:var(--white);">Ustekinumab</td>
+                <td style="text-align:center;"><span class="coverage-cell cov-covered" role="button" tabindex="0" aria-label="Florida Blue: Covered">C</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="Cigna: Restricted">R</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-not-covered" role="button" tabindex="0" aria-label="MyPriority: Not covered">N</span></td>
+                <td class="text-slate">IL-12/23 Inhibitor</td>
+              </tr>
+              <tr>
+                <td class="cell-main" style="position:sticky;left:0;background:var(--white);">Ixekizumab</td>
+                <td style="text-align:center;"><span class="coverage-cell cov-unknown" role="button" tabindex="0" aria-label="Florida Blue: Unknown">?</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-covered" role="button" tabindex="0" aria-label="Cigna: Covered">C</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="MyPriority: Restricted">R</span></td>
+                <td class="text-slate">IL-17A Inhibitor</td>
+              </tr>
+              <tr>
+                <td class="cell-main" style="position:sticky;left:0;background:var(--white);">Infliximab</td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="Florida Blue: Restricted">R</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="Cigna: Restricted">R</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="MyPriority: Restricted">R</span></td>
+                <td class="text-slate">TNF Inhibitor</td>
+              </tr>
+              <tr>
+                <td class="cell-main" style="position:sticky;left:0;background:var(--white);">Risankizumab</td>
+                <td style="text-align:center;"><span class="coverage-cell cov-restricted" role="button" tabindex="0" aria-label="Florida Blue: Restricted">R</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-not-covered" role="button" tabindex="0" aria-label="Cigna: Not covered">N</span></td>
+                <td style="text-align:center;"><span class="coverage-cell cov-unknown" role="button" tabindex="0" aria-label="MyPriority: Unknown">?</span></td>
+                <td class="text-slate">IL-23 Inhibitor</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid var(--slate-200);display:flex;justify-content:space-between;align-items:center;">
+          <span class="text-sm text-slate">7 drugs · 3 plans · Click any cell to view policy detail</span>
+          <div class="flex gap-2">
+            <button class="btn btn-secondary btn-sm">‹ Prev</button>
+            <button class="btn btn-secondary btn-sm">Next ›</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SCREEN: CHANGES ══ -->
+    <div class="screen" id="screen-changes">
+      <div class="flex items-center justify-between mb-5">
+        <div class="flex gap-3">
+          <select class="select" style="width:160px;" aria-label="Filter by plan">
+            <option>All plans</option>
+            <option>Florida Blue</option>
+            <option>Cigna</option>
+            <option>MyPriority</option>
+          </select>
+          <select class="select" style="width:160px;" aria-label="Filter by change type">
+            <option>All change types</option>
+            <option>Coverage status</option>
+            <option>Prior auth</option>
+            <option>Step therapy</option>
+            <option>Tier</option>
+          </select>
+          <input class="input" type="date" value="2025-01-01" aria-label="From date" />
+          <input class="input" type="date" value="2026-04-04" aria-label="To date" />
+        </div>
+        <button class="btn btn-secondary btn-sm">📥 Export</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Policy Changes Detected</span>
+          <span class="badge badge-amber">5 changes</span>
+        </div>
+        <table role="grid" aria-label="Policy change log">
+          <thead>
+            <tr>
+              <th>Drug</th>
+              <th>Plan</th>
+              <th>Field Changed</th>
+              <th>Change</th>
+              <th>Quarter</th>
+              <th>Detected</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cell-main">Adalimumab</td>
+              <td>Florida Blue</td>
+              <td><span class="badge badge-amber">coverage_status</span></td>
+              <td>
+                <span class="change-old">covered</span>
+                <span class="change-arrow">→</span>
+                <span class="change-new">covered_with_restrictions</span>
+              </td>
+              <td class="text-slate">Q1 → Q2 2026</td>
+              <td class="text-slate">Apr 1, 2026</td>
+            </tr>
+            <tr>
+              <td class="cell-main">Secukinumab</td>
+              <td>MyPriority</td>
+              <td><span class="badge badge-red" style="background:var(--red-100);color:var(--red-700);">requires_prior_auth</span></td>
+              <td>
+                <span class="change-old">False</span>
+                <span class="change-arrow">→</span>
+                <span class="change-new">True</span>
+              </td>
+              <td class="text-slate">Q4 2025 → Q1 2026</td>
+              <td class="text-slate">Jan 3, 2026</td>
+            </tr>
+            <tr>
+              <td class="cell-main">Ustekinumab</td>
+              <td>Cigna</td>
+              <td><span class="badge badge-blue">tier</span></td>
+              <td>
+                <span class="change-old">Tier 3</span>
+                <span class="change-arrow">→</span>
+                <span class="change-new">Tier 4</span>
+              </td>
+              <td class="text-slate">Q3 → Q4 2025</td>
+              <td class="text-slate">Oct 12, 2025</td>
+            </tr>
+            <tr>
+              <td class="cell-main">Risankizumab</td>
+              <td>Florida Blue</td>
+              <td><span class="badge badge-amber">requires_step_therapy</span></td>
+              <td>
+                <span class="change-old">False</span>
+                <span class="change-arrow">→</span>
+                <span class="change-new">True</span>
+              </td>
+              <td class="text-slate">Q1 → Q2 2026</td>
+              <td class="text-slate">Apr 1, 2026</td>
+            </tr>
+            <tr>
+              <td class="cell-main">Infliximab</td>
+              <td>Cigna</td>
+              <td><span class="badge badge-blue">coverage_status</span></td>
+              <td>
+                <span class="change-old">not_covered</span>
+                <span class="change-arrow">→</span>
+                <span class="change-new">covered_with_restrictions</span>
+              </td>
+              <td class="text-slate">Q4 2025 → Q1 2026</td>
+              <td class="text-slate">Jan 3, 2026</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ SCREEN: UPLOAD ══ -->
+    <div class="screen" id="screen-upload">
+      <div class="grid-2" style="gap:20px;">
+        <!-- Upload form -->
+        <div>
+          <div class="card mb-4">
+            <div class="card-header"><span class="card-title">Upload Policy Document</span></div>
+            <div class="card-body">
+              <div class="dropzone" role="button" tabindex="0" aria-label="Drop zone: click or drag to upload PDF">
+                <div class="dropzone-icon" aria-hidden="true">📄</div>
+                <div class="dropzone-title">Drop PDF here, or click to browse</div>
+                <div class="dropzone-sub">Supports clinical policies, DQM policies, formulary books</div>
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="input-row mb-4">
+                <div class="input-group">
+                  <label class="input-label" for="plan-select">Health Plan *</label>
+                  <select id="plan-select" class="select" aria-required="true">
+                    <option>Select plan…</option>
+                    <option>Florida Blue Commercial</option>
+                    <option>Cigna Commercial</option>
+                    <option>MyPriority Individual 2026</option>
+                    <option>+ New plan…</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label class="input-label" for="quarter-input">Quarter *</label>
+                  <input id="quarter-input" class="input" type="text" placeholder="e.g. Q2-2026" aria-required="true"/>
+                </div>
+              </div>
+
+              <div class="input-row mb-4">
+                <div class="input-group">
+                  <label class="input-label" for="doc-type">Document Type *</label>
+                  <select id="doc-type" class="select" aria-required="true">
+                    <option>clinical_policy</option>
+                    <option>dqm_policy</option>
+                    <option>formulary_book</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label class="input-label" for="benefit-side">Benefit Side *</label>
+                  <select id="benefit-side" class="select" aria-required="true">
+                    <option>medical</option>
+                    <option>pharmacy</option>
+                    <option>both</option>
+                    <option>unknown</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="input-group mb-4">
+                <label class="input-label" for="drug-hint">Primary Drug Focus</label>
+                <input id="drug-hint" class="input" type="text" placeholder="e.g. adalimumab — helps extract relevant sections faster" aria-describedby="drug-hint-help"/>
+                <div id="drug-hint-help" class="text-sm text-slate" style="margin-top:3px;">Optional. Used to narrow formulary books to the relevant drug's lines.</div>
+              </div>
+
+              <div class="flex justify-between items-center">
+                <button class="btn btn-secondary">Clear</button>
+                <button class="btn btn-primary">Upload &amp; Process →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Document queue -->
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Document Queue</span>
+              <span class="badge badge-slate">3 documents</span>
+            </div>
+            <div class="doc-list-item">
+              <div class="doc-icon" aria-hidden="true">📋</div>
+              <div class="doc-info">
+                <div class="doc-name">florida_blue_adalimumab.pdf</div>
+                <div class="doc-meta">Florida Blue · clinical_policy · Medical · Q2-2026</div>
+              </div>
+              <div class="doc-status">
+                <span class="badge badge-green">✓ Complete</span>
+                <span class="badge badge-green">🟢 High</span>
+              </div>
+            </div>
+            <div class="doc-list-item">
+              <div class="doc-icon" aria-hidden="true">📋</div>
+              <div class="doc-info">
+                <div class="doc-name">cigna_dqm005_adalimumab.pdf</div>
+                <div class="doc-meta">Cigna · dqm_policy · Pharmacy · Q4-2025</div>
+                <div class="progress-bar" style="margin-top:6px;" role="progressbar" aria-valuenow="65" aria-valuemin="0" aria-valuemax="100" aria-label="Processing 65%">
+                  <div class="progress-fill" style="width:65%"></div>
+                </div>
+                <div class="text-sm text-slate" style="margin-top:3px;">Extracting… 65%</div>
+              </div>
+              <div class="doc-status">
+                <span class="badge badge-blue">Processing</span>
+              </div>
+            </div>
+            <div class="doc-list-item">
+              <div class="doc-icon" aria-hidden="true">📋</div>
+              <div class="doc-info">
+                <div class="doc-name">mypriority_formulary.pdf</div>
+                <div class="doc-meta">MyPriority · formulary_book · Pharmacy · Q1-2026</div>
+              </div>
+              <div class="doc-status">
+                <span class="badge badge-slate">Pending</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Extraction quality panel -->
+          <div class="card mt-4">
+            <div class="card-header">
+              <span class="card-title">Last Extraction Quality</span>
+              <span class="badge badge-green">✓ Passed gate</span>
+            </div>
+            <div class="card-body">
+              <div class="grid-2" style="gap:12px;">
+                <div style="padding:12px;background:var(--slate-50);border-radius:6px;border:1px solid var(--slate-200);">
+                  <div class="text-sm text-slate">Schema Completeness</div>
+                  <div style="font-size:22px;font-weight:700;color:var(--green-700);margin-top:2px;">87%</div>
+                  <div class="cost-bar"><div class="cost-fill" style="width:87%;background:var(--green-700)"></div></div>
+                </div>
+                <div style="padding:12px;background:var(--slate-50);border-radius:6px;border:1px solid var(--slate-200);">
+                  <div class="text-sm text-slate">Required Fields Pass</div>
+                  <div style="font-size:22px;font-weight:700;color:var(--green-700);margin-top:2px;">100%</div>
+                  <div class="cost-bar"><div class="cost-fill" style="width:100%;background:var(--green-700)"></div></div>
+                </div>
+                <div style="padding:12px;background:var(--slate-50);border-radius:6px;border:1px solid var(--slate-200);">
+                  <div class="text-sm text-slate">Drugs Extracted</div>
+                  <div style="font-size:22px;font-weight:700;color:var(--slate-900);margin-top:2px;">1</div>
+                </div>
+                <div style="padding:12px;background:var(--slate-50);border-radius:6px;border:1px solid var(--slate-200);">
+                  <div class="text-sm text-slate">Anomalies</div>
+                  <div style="font-size:22px;font-weight:700;color:var(--green-700);margin-top:2px;">0</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SCREEN: MLOPS ══ -->
+    <div class="screen" id="screen-mlops">
+      <!-- Metric row -->
+      <div class="grid-4 mb-5">
+        <div class="metric">
+          <div class="metric-label">Total LLM Cost</div>
+          <div class="metric-value">$0.00</div>
+          <div class="metric-sub">Free (Gemini)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Avg Latency</div>
+          <div class="metric-value">310<span style="font-size:16px;font-weight:400;color:var(--slate-400)">ms</span></div>
+          <div class="metric-sub metric-trend-up">↑ +12ms this week</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Cache Hit Rate</div>
+          <div class="metric-value">68<span style="font-size:16px;font-weight:400;color:var(--slate-400)">%</span></div>
+          <div class="metric-sub metric-trend-up">↑ 43 hits today</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Extraction Quality</div>
+          <div class="metric-value">87<span style="font-size:16px;font-weight:400;color:var(--slate-400)">%</span></div>
+          <div class="metric-sub">Avg completeness</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="gap:20px;">
+        <!-- Alerts / Drift -->
+        <div>
+          <div class="card mb-4">
+            <div class="card-header">
+              <span class="card-title">⚠️ Drift Alerts</span>
+              <span class="badge badge-amber">2 warnings</span>
+            </div>
+            <div class="alert-item">
+              <div class="alert-icon">🔶</div>
+              <div>
+                <div class="alert-title">PA Rate Shift — Florida Blue</div>
+                <div class="alert-sub">PA rate moved 32% → 58% (+26pp). Exceeds 20% threshold.</div>
+                <div class="text-sm text-slate" style="margin-top:3px;">Q1 2026 → Q2 2026 · Apr 1, 2026</div>
+              </div>
+              <div class="alert-actions">
+                <button class="btn btn-secondary btn-sm">Acknowledge</button>
+              </div>
+            </div>
+            <div class="alert-item">
+              <div class="alert-icon">🔷</div>
+              <div>
+                <div class="alert-title">New Drug Class — IL-23 Inhibitor</div>
+                <div class="alert-sub">Risankizumab added to Florida Blue policy. New drug class detected.</div>
+                <div class="text-sm text-slate" style="margin-top:3px;">Q2 2026 · Apr 1, 2026</div>
+              </div>
+              <div class="alert-actions">
+                <button class="btn btn-secondary btn-sm">Acknowledge</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Routing tier breakdown -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Query Routing (Today)</span>
+            </div>
+            <div class="card-body">
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <div>
+                  <div class="flex justify-between mb-4" style="margin-bottom:4px;">
+                    <span class="text-sm font-600">🗃 Tier 1 — Structured (no LLM)</span>
+                    <span class="text-sm text-slate">29 queries · $0.00</span>
+                  </div>
+                  <div class="cost-bar" style="height:8px;" role="progressbar" aria-valuenow="67" aria-label="Tier 1: 67%">
+                    <div class="cost-fill" style="width:67%;background:var(--green-700)"></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between mb-4" style="margin-bottom:4px;">
+                    <span class="text-sm font-600">⚡ Tier 2 — Structured synthesis</span>
+                    <span class="text-sm text-slate">9 queries · $0.00</span>
+                  </div>
+                  <div class="cost-bar" style="height:8px;" role="progressbar" aria-valuenow="21" aria-label="Tier 2: 21%">
+                    <div class="cost-fill" style="width:21%;background:var(--blue-600)"></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between mb-4" style="margin-bottom:4px;">
+                    <span class="text-sm font-600">🔍 Tier 3 — Full RAG</span>
+                    <span class="text-sm text-slate">5 queries · $0.00</span>
+                  </div>
+                  <div class="cost-bar" style="height:8px;" role="progressbar" aria-valuenow="12" aria-label="Tier 3: 12%">
+                    <div class="cost-fill" style="width:12%;background:var(--purple-700)"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prompt registry + corrections -->
+        <div>
+          <div class="card mb-4">
+            <div class="card-header">
+              <span class="card-title">Prompt Registry</span>
+              <button class="btn btn-primary btn-sm">+ New Version</button>
+            </div>
+            <table aria-label="Prompt versions">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Version</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="cell-main">extraction_system</td>
+                  <td class="text-slate">v2.0</td>
+                  <td><span class="badge badge-green">Production</span></td>
+                  <td><button class="btn btn-secondary btn-sm" aria-label="View extraction_system v2.0">View</button></td>
+                </tr>
+                <tr>
+                  <td class="cell-main">extraction_user</td>
+                  <td class="text-slate">v2.0</td>
+                  <td><span class="badge badge-green">Production</span></td>
+                  <td><button class="btn btn-secondary btn-sm" aria-label="View extraction_user v2.0">View</button></td>
+                </tr>
+                <tr>
+                  <td class="cell-main">rag_system</td>
+                  <td class="text-slate">v1.0</td>
+                  <td><span class="badge badge-green">Production</span></td>
+                  <td><button class="btn btn-secondary btn-sm" aria-label="View rag_system v1.0">View</button></td>
+                </tr>
+                <tr>
+                  <td class="cell-main">extraction_system</td>
+                  <td class="text-slate">v1.0</td>
+                  <td><span class="badge badge-slate">Archived</span></td>
+                  <td><button class="btn btn-secondary btn-sm" aria-label="View extraction_system v1.0">View</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Analyst Corrections</span>
+              <span class="badge badge-amber">1 pending</span>
+            </div>
+            <div class="alert-item">
+              <div>
+                <div class="alert-title">coverage_status — Risankizumab / Cigna</div>
+                <div class="alert-sub">
+                  <span class="change-old">not_covered</span>
+                  <span class="change-arrow"> → </span>
+                  <span class="change-new">covered_with_restrictions</span>
+                </div>
+                <div class="text-sm text-slate" style="margin-top:3px;">Submitted by J. Dawson · Apr 3, 2026</div>
+              </div>
+              <div class="alert-actions flex gap-2">
+                <button class="btn btn-primary btn-sm">Apply</button>
+                <button class="btn btn-danger btn-sm">Reject</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+  const screens = {
+    ask:      { title: 'Ask AI',          id: 'screen-ask' },
+    compare:  { title: 'Compare',         id: 'screen-compare' },
+    coverage: { title: 'Coverage Grid',   id: 'screen-coverage' },
+    changes:  { title: 'Change Tracker',  id: 'screen-changes' },
+    upload:   { title: 'Upload Documents',id: 'screen-upload' },
+    mlops:    { title: 'MLOps Dashboard', id: 'screen-mlops' },
+  };
+
+  function show(key) {
+    // update screens
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(screens[key].id).classList.add('active');
+    // update topbar
+    document.getElementById('topbar-title').textContent = screens[key].title;
+    // update nav
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+  }
+
+  // set initial active nav
+  document.querySelectorAll('.nav-item')[0].classList.add('active');
+</script>
+</body>
+</html>
